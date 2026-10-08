@@ -1,0 +1,329 @@
+/* The game's display face ("cyber" there too): Orbitron, SIL Open Font License. */
+@font-face {
+  font-family: "cyber";
+  src: url("../fonts/cyber.ttf") format("truetype");
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+/* Same palette as the game's css/style.css. */
+:root {
+  --bg: #030309;
+  --panel-bg: rgba(10, 10, 28, 0.85);
+  --border: rgba(0, 223, 255, 0.25);
+  --cyan: #00DFFF;
+  --pink: #FF1493;
+  --green: #39FF14;
+  --gold: #FFB300;
+  --red: #FF0000;
+  /* the operator's colour: js/site.js changes both when the operator does */
+  --op: #FF1493;
+  --op-rgb: 255, 20, 147;
+  --text: #d1d5eb;
+  --text-dim: #737b9e;
+  --gutter: clamp(22px, 4vw, 54px);
+  --edge: 6px;
+  --mono: "Source Code Pro", Consolas, Monaco, monospace;
+  --display: "cyber", "Source Code Pro", monospace;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { background: var(--bg); }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: var(--cyan); text-decoration: none; }
+a:hover { text-decoration: underline; }
+a:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
+
+/* The operator-coloured edge of the game's viewport. The scene is clipped to the same box,
+   so nothing is drawn across the line or outside it. */
+.frame {
+  position: absolute;
+  inset: var(--edge);
+  border: 1px solid rgba(var(--op-rgb), 0.4);
+  border-radius: 8px;
+  box-shadow: inset 0 0 26px rgba(var(--op-rgb), 0.10);
+  pointer-events: none;
+  z-index: 3;
+}
+
+/* ─── Hero ─────────────────────────────────────────────────────────────── */
+.hero {
+  position: relative;
+  min-height: max(100vh, 600px);
+  min-height: max(100svh, 600px);
+  overflow: hidden;
+  background: var(--bg);
+}
+
+#scene {
+  position: absolute;
+  inset: var(--edge);
+  width: calc(100% - 2 * var(--edge));
+  height: calc(100% - 2 * var(--edge));
+  display: block;
+  border-radius: 8px;
+}
+
+/* CRT scan lines over the scene, under the text. */
+.hero::after {
+  content: "";
+  position: absolute;
+  inset: var(--edge);
+  border-radius: 8px;
+  background: repeating-linear-gradient(to bottom, rgba(255, 255, 255, 0.028) 0 1px, transparent 1px 3px);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.bar {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 28px var(--gutter) 0;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+
+.brand {
+  font-family: var(--display);
+  font-size: 13px;
+  letter-spacing: 0.24em;
+  color: var(--text);
+}
+
+.status {
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 9px;
+  background: var(--green);
+  box-shadow: 0 0 6px rgba(57, 255, 20, 0.7);
+}
+
+.hero-copy {
+  position: relative;
+  z-index: 2;
+  padding: clamp(20px, 5vh, 56px) var(--gutter) 0;
+  /* clicks fall through to the street, except on the words themselves */
+  pointer-events: none;
+}
+
+.hero-copy > * { pointer-events: auto; }
+
+/* Keeps the copy readable where the skyline climbs behind it. */
+.hero-copy::before {
+  content: "";
+  position: absolute;
+  inset: -40px auto -60px -40px;
+  width: min(100vw, 900px);
+  background: radial-gradient(ellipse at 30% 45%, rgba(3, 3, 9, 0.82) 0%, rgba(3, 3, 9, 0.55) 45%, rgba(3, 3, 9, 0) 72%);
+  z-index: -1;
+  pointer-events: none;
+}
+
+.boot {
+  min-height: 5.6em;
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text-dim);
+  white-space: pre-wrap;
+}
+
+.boot .cursor {
+  display: inline-block;
+  width: 0.62em;
+  height: 1.05em;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  background: var(--text-dim);
+  animation: blink 1.06s steps(1) infinite;
+}
+
+@keyframes blink { 50% { opacity: 0; } }
+
+.wordmark {
+  /* As wide as its own text, so the reveal's clip never cuts the title short. */
+  width: max-content;
+  margin-top: 10px;
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: clamp(2.1rem, min(9.5vw, 14vh), 7rem);
+  line-height: 1.05;
+  letter-spacing: 0.03em;
+  color: #EAFBFF;
+  text-shadow: 0 0 22px rgba(0, 223, 255, 0.55), 0 0 2px rgba(0, 223, 255, 0.9);
+  white-space: nowrap;
+  /* Negative insets leave room for the glow. */
+  clip-path: inset(-0.4em);
+  transition: clip-path 0.7s steps(14);
+}
+
+.tagline {
+  margin-top: 14px;
+  font-family: var(--display);
+  font-size: clamp(0.8rem, 1.7vw, 1.05rem);
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--op);
+}
+
+.blurb {
+  margin-top: 16px;
+  max-width: 54ch;
+  color: var(--text);
+}
+
+.tagline, .blurb { transition: opacity 0.5s linear 0.45s; }
+
+/* While the boot lines type, the title waits (js/site.js adds and removes this). */
+.hero.booting .wordmark { clip-path: inset(-0.4em 100% -0.4em -0.4em); }
+.hero.booting .tagline,
+.hero.booting .blurb { opacity: 0; }
+
+/* The game's HEAT meter, sitting on the street. */
+.hud {
+  position: absolute;
+  left: var(--gutter);
+  bottom: calc(var(--edge) + 8px);
+  pointer-events: none;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.hud-place { color: var(--text); margin-right: 6px; }
+
+.hud-meter {
+  width: 96px;
+  height: 6px;
+  border: 1px solid rgba(209, 213, 235, 0.35);
+}
+
+.hud-fill {
+  display: block;
+  width: 0;
+  height: 100%;
+  background: var(--gold);
+}
+
+.hud-seen { color: var(--red); visibility: hidden; }
+.hud.seen .hud-seen { visibility: visible; }
+.hud.seen .hud-fill { background: var(--red); }
+
+/* ─── Below the fold ───────────────────────────────────────────────────── */
+.below {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: clamp(40px, 8vw, 88px) var(--gutter);
+  display: grid;
+  gap: 28px;
+}
+
+.stats {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.stats li,
+.panel {
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 22px 24px;
+}
+
+.stat-n {
+  display: block;
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: clamp(2rem, 5vw, 3rem);
+  line-height: 1.1;
+  color: var(--cyan);
+}
+
+.stat-t {
+  display: block;
+  margin-top: 8px;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.panel h2 {
+  font-family: var(--display);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
+  color: var(--op);
+}
+
+.dir { margin-top: 14px; display: grid; gap: 8px; }
+.dir div { display: flex; flex-wrap: wrap; gap: 4px 20px; }
+
+.dir dt {
+  width: 84px;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  line-height: 24px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.dir dd { overflow-wrap: anywhere; }
+
+.foot {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 0 var(--gutter) 44px;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+@media (max-width: 640px) {
+  .stats { grid-template-columns: 1fr; }
+  .bar { padding-top: 22px; }
+  .brand { font-size: 12px; letter-spacing: 0.16em; }
+  .status { letter-spacing: 0.1em; }
+  .hud-place { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wordmark, .tagline, .blurb { transition: none; }
+  .boot .cursor { animation: none; }
+  .hud { display: none; }
+}
