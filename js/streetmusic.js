@@ -21,6 +21,7 @@
 //   music.toggle();         // returns true when it is now playing
 //   music.setTension(0.6);
 //   music.blip(660, 990, 0.09);
+//   music.hiss(0.5, "highpass", 3600, 0.1);
 (function () {
     "use strict";
 
@@ -365,6 +366,11 @@
             setVolume: function (v) { volume = v; if (master) master.gain.setTargetAtTime(v, ctx.currentTime, 0.05); },
             setTension: function (v) { tension = Math.max(0, Math.min(1, v)); },
             blip: blip,
+            // a burst of filtered noise through the same output: hiss(seconds, filter type, frequency, level)
+            hiss: function (seconds, type, freq, vol) {
+                if (!on || !ctx || ctx.state !== "running") return;
+                noiseHit(ctx.currentTime + 0.01, type || "highpass", freq || 4000, 0.7, vol || 0.1, seconds || 0.3, 0);
+            },
             isPlaying: function () { return on; }
         };
     }

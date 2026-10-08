@@ -59,8 +59,12 @@ a:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
 /* ─── Hero ─────────────────────────────────────────────────────────────── */
 .hero {
   position: relative;
-  min-height: max(100vh, 600px);
-  min-height: max(100svh, 600px);
+  /* The words on top, the street below them. The street always has room of its own, so on a short
+     screen the page grows a little and scrolls where it would otherwise crush the buildings flat. */
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  min-height: 100svh;
   overflow: hidden;
   background: var(--bg);
 }
@@ -149,6 +153,12 @@ a:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
 }
 
 .hero-copy > * { pointer-events: auto; }
+
+.scene-room {
+  flex: 1 0 auto;
+  min-height: max(230px, min(300px, 44vh));
+  pointer-events: none;
+}
 
 /* Keeps the copy readable where the skyline climbs behind it. */
 .hero-copy::before {
@@ -366,6 +376,18 @@ a:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
 
 @media (max-width: 900px) and (min-width: 641px) {
   .cards { grid-template-columns: 1fr; }
+}
+
+/* A short screen (a phone on its side): the boot lines go and the copy closes up, so the title and
+   the street share the first screen. */
+@media (max-height: 560px) {
+  .bar { padding-top: 14px; }
+  .boot { display: none; }
+  .hero-copy { padding-top: 6px; }
+  .wordmark { margin-top: 0; font-size: clamp(1.9rem, min(8vw, 15vh), 3.4rem); }
+  .tagline { margin-top: 6px; }
+  .blurb { margin-top: 8px; max-width: 46ch; font-size: 13px; line-height: 1.5; }
+  .genre { margin-top: 8px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

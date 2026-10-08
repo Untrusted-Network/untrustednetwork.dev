@@ -63,7 +63,8 @@
     var heatFill = document.getElementById("heatFill");
 
     var W = 0, H = 0, K = 1, DPR = 1;
-    var layer = null;       // sky, backdrop, facades and street, drawn once per resize
+    var backLayer = null;   // sky and skyline, drawn once per resize (and when the operator's colour changes)
+    var frontLayer = null;  // facades and street, drawn once per resize; the traffic flies between the two
     var S = null;           // layout of the current scene
     var rain = [];
     var copyEl = document.querySelector(".hero-copy"), barEl = document.querySelector(".bar"), copySig = "";
@@ -98,7 +99,7 @@
     // Street furniture for each gap between buildings, as [distance from the gap's start, kind]. The
     // streetlight stands near the middle; everything keeps clear of it and of the walls either side.
     var STREET = [
-        [[54, "bench"], [176, "vending"], [226, "bin"]],
+        [[54, "bench"], [176, "vending"], [226, "hydrant"]],
         [[50, "tree"], [205, "cabinet"], [262, "bin"]],
         [[40, "bin"], [170, "bench"]],
         [[48, "vending"], [230, "bench"], [290, "bin"]],
@@ -115,11 +116,32 @@
     var CABINET_ROOF = { body: "#171b20", face: "#20252c", edge: "#8A96A3", dim: "rgba(138,150,163,0.45)" };
     var GAPS = [260, 300, 240, 320, 280, 300];
     var FACADE = { winW: 18, winH: 26, gapX: 36, gapY: 46, pad: 36, padMin: 14, storeH: 114, bayW: 60, corner: 10, edge: 4, edgeAlpha: 0.42, signY: 134, plateH: 20 };
-    var FAR = [
-        { body: "#160720", win: "#6a1456" },
-        { body: "#0a0c1c", win: "#263a70" },
-        { body: "#1c0826", win: "#86186a" }
+    // The game's three skyline layers (preRenderSkyline), far to near: where the towers stand, their
+    // size, their colour, what crowns them, and the grid their windows sit on. The windows take the
+    // operator's colour.
+    var SKYLINE = [
+        { step: 350, k1: 12.3, k2: 32.1, jx: 50, w: [120, 180], h: [250, 350], rgb: [8, 4, 12, 6, 25, 10], gap: [15, 15, 20, 20], size: [2, 3, 2, 3], alpha: 0.15, pat: [12.3, 4.5, -0.3],
+          crown: function (c, x, top, w, h1, h2) {
+              if (h1 > 0.6) c.fillRect(x + w * 0.2, top - 15 * K, w * 0.6, 15 * K);
+              if (h2 > 0.8) c.fillRect(x + w * 0.7, top - 40 * K, 4 * K, 40 * K);
+          } },
+        { step: 250, k1: 22.2, k2: 44.4, jx: 40, w: [100, 150], h: [150, 250], rgb: [18, 5, 22, 6, 40, 10], gap: [15, 20, 20, 25], size: [4, 4, 6, 6], alpha: 0.25, pat: [3.3, 7.1, -0.2],
+          crown: function (c, x, top, w, h1, h2) {
+              if (h1 > 0.4) c.fillRect(x + 10 * K, top - 20 * K, w - 20 * K, 20 * K);
+              if (h2 < 0.2) { c.fillRect(x + 20 * K, top - 35 * K, 10 * K, 35 * K); c.fillRect(x + w - 30 * K, top - 35 * K, 10 * K, 35 * K); }
+          } },
+        { step: 200, k1: 33.3, k2: 66.6, jx: 30, w: [80, 120], h: [100, 200], rgb: [35, 10, 8, 4, 45, 10], gap: [20, 25, 30, 30], size: [8, 6, 12, 10], alpha: 0.35, pat: [8.1, 3.2, -0.1],
+          crown: function (c, x, top, w, h1, h2) {
+              if (h2 > 0.5) c.fillRect(x + w * 0.3, top - 25 * K, w * 0.4, 25 * K);
+          } }
     ];
+    // Background traffic (the game's Lower Streets mix): three depths, most of it nearest.
+    var TRAFFIC = { variants: [0, 0, 2, 3, 1, 5], colours: ["#00DFFF", "#FF1493", "#FFB300", "#9D4EDD", "#38BDF8", "#F43F5E"],
+        speed: [0, 270, 450, 630], extra: 90, scale: [0, 0.10, 0.17, 0.27], alpha: [0, 0.35, 0.60, 0.85], perSecond: 0.7 };
+    // An Overwatch patrol drone comes through now and then, sooner when the heat is high.
+    var PATROL = { col: "#6E6E6E", scale: 1.5, height: 180, speed: 90, first: 9, every: [24, 22], beam: 40 };
+    // What can be clicked in the street, as [half-width, height] in the game's pixels.
+    var PROP_BOX = { bench: [33, 38], bin: [13, 33], vending: [18, 60], tree: [30, 90], cabinet: [32, 47], hydrant: [12, 34] };
     var LAMP = { poleH: 168, baseW: 12, baseH: 38, taperH: 10, doorW: 8, doorTop: 35, doorBot: 23 };
     // Overwatch hardware: black body, grey edge, red only in the eye and the beam.
     var CAM = { body: "#000000", edge: "#6E6E6E", eye: "#FF0000", sweep: 0.75, half: 0.2, rate: 0.45, downFor: 12, height: 150 };
@@ -127,12 +149,13 @@
     var OP_COLOURS = ["#FF1493", "#00DFFF", "#39FF14", "#FF3E00", "#8A2BE2"];
     var HEAT = { rise: 34, fall: 14, grace: 1.2, tag: 20, cam: 30 };
     var SCAN = { range: 900, time: 0.7, show: 6 };
-    var TAGS = ["10 PRINT", "GOTO 10", "NO CARRIER", "+++ATH0", "READY."];
-    var TAG_MAX = 8;
+    var TAG_ORDER = ["operator_mark", "crown", "term_10print", "glitch_eye", "bolt", "term_nocarrier", "null_sig", "arrow_up", "term_goto10", "circuit", "term_ready", "term_ath0"];
+    var TAG_MAX = 10, TAG_HALF = 18, TAG_TIME = 0.6;
 
     var op = { x: 0, dir: 1, target: 0, wanderAt: 0, colour: 0 };
     var drone = { x: 0, y: 0 };
     var tags = [], tagNext = 0, scan = null, camDownUntil = 0;
+    var cars = [], patrol = null, patrolAt = PATROL.first, bits = [], floats = [];
     var heat = 0, seen = false, lastSeen = -10, lastPointer = -10, lastHud = -1, pointerIn = false;
 
     function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
@@ -176,34 +199,36 @@
             boxes.forEach(function (q) { if (q.r > q.l && q.r > x0 - 16 && q.l < x1 + 16) ceiling = Math.max(ceiling, q.b); });
             return gy - ceiling - 22;
         };
-        S = { gy: gy, far: [], near: [], lamps: [], props: [], cam: null };
-
-        var x = -40 * K, w, h;
-        while (x < W + 40) {
-            w = (90 + rand() * 120) * K;
-            h = Math.max(60 * K, Math.min((200 + rand() * 260) * K, roomOver(x, x + w) * (0.72 + rand() * 0.28), H * 0.62));
-            S.far.push({ x: x, w: w, h: h, pal: FAR[Math.floor(rand() * FAR.length)], seed: Math.floor(rand() * 1e6) });
-            x += w + (rand() < 0.3 ? rand() * 30 * K : 0);
-        }
+        S = { gy: gy, near: [], lamps: [], props: [], cam: null, roomOver: roomOver };
+        var x, w, h;
 
         // On a wide screen the street is slid along so the second building, the arcade, starts just
         // past the end of the words, where it can stand at its full height. If that leaves bare
         // street at the left edge, one more building goes in before the first.
-        var count = BUILDINGS.length, copyRight = 0, i = 0, def, gap, room, slot;
-        boxes.forEach(function (q) { copyRight = Math.max(copyRight, q.r); });
+        //
+        // On a narrow screen (a phone held upright) the buildings are narrower and the street is set
+        // so the first gap, with its lamp and furniture, sits in view and the arcade's wall and its
+        // billboards close the right-hand edge.
+        var count = BUILDINGS.length, copyRight = 0, copyBottom = 0, i = 0, def, gap, room, slot, space;
+        var narrow = W < 720;
+        var widthOf = function (d) { return (narrow ? Math.min(d.w, 400) : d.w) * K; };
+        boxes.forEach(function (q) { copyRight = Math.max(copyRight, q.r); copyBottom = Math.max(copyBottom, q.b); });
         x = -200 * K;
-        if (W - copyRight > 300 * K) x = Math.max(x, copyRight + 24 - (BUILDINGS[0].w + GAPS[0]) * K);
-        if (x > -40 * K) { i = -1; x -= (BUILDINGS[count - 1].w + GAPS[count - 1]) * K; }
+        if (narrow) x = W - 34 * K - (widthOf(BUILDINGS[0]) + GAPS[0] * K);
+        else if (W - copyRight > 300 * K) x = Math.max(x, copyRight + 24 - (BUILDINGS[0].w + GAPS[0]) * K);
+        if (x > -40 * K) { i = -1; x -= widthOf(BUILDINGS[count - 1]) + GAPS[count - 1] * K; }
         while (x < W + 40) {
             slot = ((i % count) + count) % count;
             def = BUILDINGS[slot];
-            w = def.w * K;
-            // a facade keeps its ground storey and a row of windows; the rest of the room is for its roof
+            w = widthOf(def);
+            // Room above the roof is kept for its gadgets where there is plenty; where there is little,
+            // the wall takes all of it, since rows of windows matter more than a cabinet.
             room = roomOver(x, x + w);
-            h = Math.max(150 * K, Math.min(def.h * K, room - roofSpace(def) * K));
+            space = roofSpace(def) * K;
+            h = room - space >= 200 * K ? Math.min(def.h * K, room - space) : Math.max(150 * K, Math.min(def.h * K, room - 8));
             S.near.push({ x: x, w: w, h: h, def: def, idx: i, room: room });
             gap = GAPS[slot] * K;
-            S.props.push({ x: x + w, set: STREET[slot], idx: slot });
+            STREET[slot].forEach(function (it) { S.props.push({ x: x + w + it[0] * K, kind: it[1], idx: slot, shakeUntil: 0, used: false }); });
             // the lamp's light falls a little to its right, so the post stands left of the gap's middle
             S.lamps.push({ x: x + w + gap / 2 - 22 * K, broken: !!broken[S.lamps.length] });
             x += w + gap;
@@ -221,12 +246,25 @@
             S.cam = { x: clamp(best.x + best.w * 0.8, lo, Math.max(lo, hi)), y: gy - Math.min(CAM.height * K, best.h - 30 * K) };
         }
 
-        layer = document.createElement("canvas");
-        layer.width = canvas.width;
-        layer.height = canvas.height;
-        var c = layer.getContext("2d");
+        // where the traffic flies and the patrol drone passes: under the words, over the street
+        S.laneBot = gy - 90 * K;
+        S.laneTop = Math.min(copyBottom + 14, S.laneBot - 120 * K);
+        S.patrolY = Math.min(gy - 110 * K, Math.max(gy - PATROL.height * K, copyBottom + 26));
+
+        backLayer = document.createElement("canvas");
+        frontLayer = document.createElement("canvas");
+        backLayer.width = frontLayer.width = canvas.width;
+        backLayer.height = frontLayer.height = canvas.height;
+        drawBack();
+        var c = frontLayer.getContext("2d");
         c.setTransform(DPR, 0, 0, DPR, 0, 0);
-        drawStatic(c);
+        drawFront(c);
+
+        cars.length = 0;
+        bits.length = 0;
+        floats.length = 0;
+        patrol = null;
+        if (!REDUCE) for (i = 0; i < maxCars() / 2; i++) spawnCar(true);
 
         rain.length = 0;
         var n = Math.round(W / 16);
@@ -252,33 +290,43 @@
         c.closePath();
     }
 
-    function drawStatic(c) {
-        var gy = S.gy;
+    // The sky and the game's three layers of skyline. Each tower stops short of the words above it,
+    // and its windows start a row down from its own roof, so no top is ever left blank.
+    function drawBack() {
+        var c = backLayer.getContext("2d"), gy = S.gy, tint = rgbOf(OP_COLOURS[op.colour]);
+        c.setTransform(DPR, 0, 0, DPR, 0, 0);
         c.fillStyle = "#050510";
         c.fillRect(0, 0, W, H);
-
-        S.far.forEach(function (b) {
-            var rand = rng(b.seed), top = gy - b.h, wx, wy;
-            c.fillStyle = b.pal.body;
-            c.fillRect(b.x, top, b.w, b.h);
-            c.fillStyle = b.pal.win;
-            for (wx = b.x + 14 * K; wx < b.x + b.w - 16 * K; wx += 26 * K) {
-                for (wy = top + 22 * K; wy < gy - 30 * K; wy += 34 * K) {
-                    if (rand() < 0.22) c.fillRect(wx, wy, 8 * K, 16 * K);
+        SKYLINE.forEach(function (L) {
+            for (var i = -5; i * L.step * K < W + 60; i++) {
+                var h1 = Math.abs(Math.sin(i * L.k1)), h2 = Math.abs(Math.cos(i * L.k2));
+                var w = (L.w[0] + h1 * L.w[1]) * K, x = (i * L.step + h1 * L.jx) * K;
+                if (x + w < 0) continue;
+                var h = Math.max(40 * K, Math.min((L.h[0] + h2 * L.h[1]) * K, S.roomOver(x, x + w) - 34 * K));
+                var top = gy - h;
+                c.fillStyle = "rgb(" + (L.rgb[0] + Math.floor(h1 * L.rgb[1])) + "," + (L.rgb[2] + Math.floor(h2 * L.rgb[3])) + "," + (L.rgb[4] + Math.floor(h1 * L.rgb[5])) + ")";
+                c.fillRect(x, top, w, h);
+                L.crown(c, x, top, w, h1, h2);
+                var wg = (L.gap[0] + Math.floor(h1 * L.gap[1])) * K, hg = (L.gap[2] + Math.floor(h2 * L.gap[3])) * K;
+                var ws = (L.size[0] + Math.floor(h1 * L.size[1])) * K, hs = (L.size[2] + Math.floor(h2 * L.size[3])) * K;
+                var row = 0, col, wx, wy;
+                c.fillStyle = "rgba(" + tint + "," + L.alpha + ")";
+                for (wy = top + hg; wy < gy; wy += hg) {
+                    col = 0;
+                    for (wx = x + wg; wx < x + w - wg; wx += wg) {
+                        if (Math.sin(col * L.pat[0] + row * L.pat[1] + i) > L.pat[2]) c.fillRect(wx, wy, ws, hs);
+                        col++;
+                    }
+                    row++;
                 }
             }
         });
+    }
 
+    function drawFront(c) {
+        var gy = S.gy;
+        c.clearRect(0, 0, W, H);
         S.near.forEach(function (b) { drawBuilding(c, b); });
-        S.props.forEach(function (g) {
-            g.set.forEach(function (it) {
-                c.save();
-                c.translate(g.x + it[0] * K, gy - 1);
-                c.scale(K, K);
-                STREET_DRAW[it[1]](c, g.idx);
-                c.restore();
-            });
-        });
 
         // Street: kerb line, lane dashes and the two service conduits under it. The foot of the band
         // is left clear for the HEAT readout.
@@ -755,8 +803,8 @@
             c.strokeStyle = "rgba(200,210,230,0.3)"; c.strokeRect(L + 3.5, T + 49.5, 21, 6);
             c.fillStyle = br.col; c.globalAlpha = 0.25; c.fillRect(L + 27, T + 50, 7, 1.5); c.globalAlpha = 1;
         },
-        tree: function (c) {
-            var hw = 18, h = 16, edge = "#2BD1FC", lobes = [[0, 0, 21], [-16, 6, 13], [16, 6, 13]], cy = -62;
+        tree: function (c, idx, sway) {
+            var hw = 18, h = 16, edge = "#2BD1FC", lobes = [[0, 0, 21], [-16, 6, 13], [16, 6, 13]], cy = -62, sx = sway || 0;
             c.fillStyle = "#2a2540"; c.fillRect(-hw + 3, -2, 6, 2); c.fillRect(hw - 9, -2, 6, 2);
             c.beginPath(); c.moveTo(-hw + 2, -2); c.lineTo(-hw, -h + 3); c.lineTo(hw, -h + 3); c.lineTo(hw - 2, -2); c.closePath();
             c.fillStyle = "#0a2a3a"; c.strokeStyle = edge; c.lineWidth = 1.5; c.fill(); c.stroke();
@@ -766,20 +814,20 @@
             c.fillStyle = "#04080c"; c.fillRect(-hw + 1, -h - 1.5, hw * 2 - 2, 1.5);
             var limbs = function () {
                 c.beginPath();
-                c.moveTo(0, -16); c.lineTo(0, -46);
-                c.moveTo(0, -32); c.lineTo(-13, -52);
-                c.moveTo(0, -37); c.lineTo(11, -56);
+                c.moveTo(0, -16); c.lineTo(sx, -46);
+                c.moveTo(0, -32); c.lineTo(sx - 13, -52);
+                c.moveTo(0, -37); c.lineTo(sx + 11, -56);
             };
             c.strokeStyle = "#3a3050"; c.lineWidth = 4.5; limbs(); c.stroke();
             c.strokeStyle = "#6a5a8a"; c.lineWidth = 1; limbs(); c.stroke();
             // the canopy: outlined on its outer edge only, then flat facets of light and shade inside
-            var path = function () { c.beginPath(); lobes.forEach(function (l) { lobe(c, l[0], cy + l[1], l[2]); }); };
+            var path = function () { c.beginPath(); lobes.forEach(function (l) { lobe(c, sx + l[0], cy + l[1], l[2]); }); };
             c.strokeStyle = "#00DFFF"; c.lineWidth = 3; c.lineJoin = "round";
             path(); c.stroke();
             c.fillStyle = "#2CC30F"; path(); c.fill();
             c.save(); path(); c.clip();
             lobes.forEach(function (l) {
-                var lx = l[0], ly = cy + l[1], r = l[2];
+                var lx = sx + l[0], ly = cy + l[1], r = l[2];
                 c.fillStyle = "#1E9A0A";
                 c.beginPath(); c.moveTo(lx - r, ly + r * 0.25); c.lineTo(lx + r, ly + r * 0.25); c.lineTo(lx + r, ly + r + 2); c.lineTo(lx - r, ly + r + 2); c.closePath(); c.fill();
                 c.fillStyle = "#5BE83C";
@@ -787,8 +835,257 @@
             });
             c.restore();
         },
-        cabinet: function (c) { drawCabinet(c, 2, CABINET_STREET); }
+        cabinet: function (c) { drawCabinet(c, 2, CABINET_STREET); },
+        // the pillar hydrant: a flanged base, the barrel and bonnet, two capped outlets with their chains
+        hydrant: function (c) {
+            var or = "#FF7A00";
+            c.fillStyle = "#0c0812"; c.strokeStyle = or; c.lineWidth = 1.5; c.lineJoin = "miter"; c.shadowBlur = 3 * K * DPR; c.shadowColor = or;
+            c.fillRect(-12, -19, 5, 7); c.strokeRect(-12, -19, 5, 7);
+            c.fillRect(7, -19, 5, 7); c.strokeRect(7, -19, 5, 7);
+            c.beginPath();
+            c.moveTo(-6, -3); c.lineTo(-6, -23); c.lineTo(-7.5, -23); c.lineTo(-7.5, -26); c.lineTo(-5, -26);
+            c.lineTo(-3, -31); c.lineTo(3, -31); c.lineTo(5, -26); c.lineTo(7.5, -26); c.lineTo(7.5, -23); c.lineTo(6, -23);
+            c.lineTo(6, -3); c.closePath();
+            c.fill(); c.stroke();
+            c.fillRect(-9, -3, 18, 3); c.strokeRect(-9, -3, 18, 3);
+            c.shadowBlur = 0;
+            c.fillStyle = or; c.fillRect(-2, -34, 4, 3);
+            c.fillStyle = "rgba(255,122,0,0.55)"; c.fillRect(-5, -13, 10, 1.5);
+            c.fillStyle = "rgba(255,122,0,0.85)";
+            c.fillRect(-10.5, -16.5, 2, 2); c.fillRect(8.5, -16.5, 2, 2);
+            c.fillRect(-7, -2, 1.5, 1.5); c.fillRect(5.5, -2, 1.5, 1.5);
+            c.strokeStyle = "rgba(200,210,230,0.45)"; c.lineWidth = 0.8;
+            c.beginPath(); c.moveTo(-9.5, -12); c.quadraticCurveTo(-9, -8, -6, -9);
+            c.moveTo(9.5, -12); c.quadraticCurveTo(9, -8, 6, -9); c.stroke();
+        }
     };
+
+    // Street furniture is drawn every frame, so a bin can rattle and a tree can sway.
+    function drawProps(t) {
+        S.props.forEach(function (p) {
+            var left = p.shakeUntil - t, sway = left > 0 ? Math.sin(left * 38) * 3 * Math.min(1, left / 0.4) : 0;
+            ctx.save();
+            ctx.translate(p.x + (p.kind === "bin" ? sway * 0.6 * K : 0), S.gy - 1);
+            ctx.scale(K, K);
+            STREET_DRAW[p.kind](ctx, p.idx, p.kind === "tree" ? sway : 0);
+            ctx.restore();
+        });
+    }
+
+    // ─── Background traffic ────────────────────────────────────────────────
+    // The game's flying vehicles (_drawFlyingHovercarShape): a spinner, a hauler, a roadster, a van and
+    // a limousine, in three depths behind the street's buildings.
+    function carPath(c, pts) {
+        c.beginPath();
+        c.moveTo(pts[0], pts[1]);
+        for (var i = 2; i < pts.length; i += 2) c.lineTo(pts[i], pts[i + 1]);
+        c.closePath();
+    }
+    function carBody(c, pts, fill, stroke, lw, glow) {
+        c.fillStyle = fill; c.strokeStyle = stroke; c.lineWidth = lw;
+        if (glow) { c.shadowBlur = glow * DPR; c.shadowColor = stroke; }
+        carPath(c, pts); c.fill(); c.stroke();
+        c.shadowBlur = 0;
+    }
+    function carGlass(c, pts, mullions, thin) {
+        c.fillStyle = "rgba(10,8,28,0.9)"; c.strokeStyle = "#00DFFF"; c.lineWidth = thin;
+        carPath(c, pts); c.fill(); c.stroke();
+        if (mullions) { c.strokeStyle = "rgba(0,223,255,0.45)"; c.lineWidth = thin * 0.7; strokePath(c, mullions); }
+    }
+    function carPod(c, x, w, edge, ion, thin, depth) {
+        c.fillStyle = "#0c0a1a"; c.strokeStyle = edge; c.lineWidth = thin;
+        c.fillRect(x, -6, w, 6); c.strokeRect(x, -6, w, 6);
+        c.fillStyle = "rgba(" + ion + ",0.85)"; c.fillRect(x + 2, -1.5, w - 4, 1.5);
+        if (depth >= 2) {
+            var ph = depth === 3 ? 6 : 3.5, g = c.createLinearGradient(0, 0, 0, ph);
+            g.addColorStop(0, "rgba(" + ion + ",0.6)"); g.addColorStop(1, "rgba(" + ion + ",0)");
+            c.fillStyle = g; c.fillRect(x + 3, 0, w - 6, ph);
+        }
+    }
+    function carLamps(c, hx, hy, tx, ty, depth) {
+        c.fillStyle = "#FFFFFF";
+        if (depth === 3) { c.shadowBlur = 4 * DPR; c.shadowColor = "#FFFFFF"; }
+        c.fillRect(hx - 2, hy - 1.5, 4, 3);
+        c.shadowBlur = 0;
+        c.fillStyle = "#FF1E40"; c.fillRect(tx - 1.5, ty - 1.5, 3, 3);
+        if (depth >= 2) {
+            var len = depth === 3 ? 12 : 7, g = c.createLinearGradient(tx, 0, tx - len, 0);
+            g.addColorStop(0, "rgba(255,30,64,0.4)"); g.addColorStop(1, "rgba(255,30,64,0)");
+            c.fillStyle = g; c.fillRect(tx - len, ty - 1, len, 2);
+        }
+    }
+    function drawCar(hc) {
+        var c = ctx, d = hc.depth, s = TRAFFIC.scale[d], col = hc.col, n = parseInt(col.slice(1), 16);
+        var r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+        var paint = "rgb(" + Math.round(r * 0.42) + "," + Math.round(g * 0.42) + "," + Math.round(b * 0.42) + ")";
+        var soft = rgba(col, 0.55), ion = (Math.max(r, g, b) - Math.min(r, g, b) < 60) ? "170,215,255" : r + "," + g + "," + b;
+        var lw = (d === 1 ? 1.0 : d === 2 ? 1.4 : 1.8) / s, thin = (d === 1 ? 0.8 : d === 2 ? 1.0 : 1.2) / s, glow = d === 3 ? 3 : 0, x;
+        c.save();
+        c.globalAlpha = TRAFFIC.alpha[d];
+        c.translate(hc.x, hc.y);
+        c.scale(hc.vx >= 0 ? 1 : -1, 1);
+        c.scale(s * K, s * K);
+        c.lineJoin = "round";
+        if (hc.variant === 1) {                 // hauler: a cab and a ribbed container on three pods
+            carBody(c, [-78, -8, -78, -54, 30, -54, 30, -40, 62, -34, 72, -14, 72, 0, -78, 0], "#14121e", col, lw, glow);
+            c.fillStyle = paint; carPath(c, [30, -40, 62, -34, 72, -14, 72, 0, 30, 0]); c.fill();
+            c.strokeStyle = col; c.lineWidth = lw; line(c, 30, -54, 30, 0);
+            carGlass(c, [36, -34, 53, -34, 60, -27, 60, -20, 36, -20], d >= 2 ? [48, -34, 48, -20] : null, thin);
+            if (d >= 2) {
+                c.strokeStyle = soft; c.lineWidth = thin; c.strokeRect(-70, -48, 92, 40);
+                for (x = -60; x < 20; x += 12) line(c, x, -46, x, -10);
+                c.fillStyle = "#FFB000";
+                for (x = -72; x <= 24; x += 24) c.fillRect(x, -53, 3, 2);
+            }
+            carPod(c, -72, 34, col, ion, thin, d); carPod(c, -30, 34, col, ion, thin, d); carPod(c, 30, 36, col, ion, thin, d);
+            carLamps(c, 70, -16, -77, -12, d);
+        } else if (hc.variant === 2) {          // roadster: low and long, with a tail fin
+            carBody(c, [-62, -6, -50, -20, -8, -26, 34, -20, 62, -8, 66, -2, 58, 0, -56, 0], paint, col, lw, glow);
+            carGlass(c, [-30, -19, -6, -25, 24, -19, 10, -13, -30, -13], d >= 2 ? [-4, -24, -4, -13] : null, thin);
+            if (d >= 2) { c.strokeStyle = soft; c.lineWidth = thin; line(c, -54, -9, 60, -9); }
+            carBody(c, [-56, -8, -70, -24, -62, -24, -48, -12], paint, col, lw, 0);
+            carPod(c, -44, 88, col, ion, thin, d);
+            carLamps(c, 63, -5, -58, -8, d);
+        } else if (hc.variant === 3) {          // van: a tall box with a livery band and a roof rack
+            carBody(c, [-60, 0, -60, -44, 24, -46, 42, -36, 58, -18, 60, 0], paint, col, lw, glow);
+            carGlass(c, [28, -40, 40, -34, 52, -20, 28, -20], null, thin);
+            if (d >= 2) {
+                c.fillStyle = rgba(col, 0.4); c.fillRect(-60, -26, 86, 4);
+                c.strokeStyle = soft; c.lineWidth = thin; c.strokeRect(-18, -40, 30, 34);
+                strokePath(c, [-54, -48, 18, -49, -48, -48, -48, -45, 12, -49, 12, -46]);
+                carGlass(c, [-54, -38, -26, -38, -26, -30, -54, -30], null, thin);
+            }
+            carPod(c, -54, 30, col, ion, thin, d); carPod(c, 22, 32, col, ion, thin, d);
+            carLamps(c, 57, -12, -59, -14, d);
+        } else if (hc.variant === 5) {          // limousine: a long row of tinted windows on three pods
+            carBody(c, [-86, -6, -74, -22, -30, -28, 34, -28, 62, -20, 86, -8, 88, 0, -82, 0], paint, col, lw, glow);
+            carGlass(c, [-66, -22, -26, -26, -26, -14, -66, -14], d >= 2 ? [-46, -24, -46, -14] : null, thin);
+            carGlass(c, [-20, -26, 28, -26, 28, -14, -20, -14], d >= 2 ? [4, -26, 4, -14] : null, thin);
+            carGlass(c, [32, -25, 56, -18, 32, -14], null, thin);
+            if (d >= 2) { c.strokeStyle = "rgba(224,242,254,0.7)"; c.lineWidth = thin; line(c, -80, -9, 84, -9); }
+            carPod(c, -74, 34, col, ion, thin, d); carPod(c, -18, 36, col, ion, thin, d); carPod(c, 42, 34, col, ion, thin, d);
+            carLamps(c, 85, -5, -82, -7, d);
+        } else {                                // spinner: a wedge with a raked canopy and a spoiler
+            carBody(c, [-56, -14, -44, -34, 8, -40, 42, -22, 58, -12, 50, 0, -48, 0], paint, col, lw, glow);
+            carGlass(c, [-24, -32, 6, -38, 34, -22, 10, -13, -24, -13], d >= 2 ? [-6, -35, -6, -13, 16, -32, 16, -15] : null, thin);
+            if (d >= 2) { c.strokeStyle = soft; c.lineWidth = thin; line(c, -50, -10, 52, -10); }
+            c.strokeStyle = col; c.lineWidth = lw;
+            c.beginPath(); c.moveTo(-56, -14); c.lineTo(-68, -32); c.lineTo(-58, -32); c.stroke();
+            carPod(c, -42, 26, col, ion, thin, d); carPod(c, 14, 28, col, ion, thin, d);
+            carLamps(c, 55, -12, -53, -16, d);
+        }
+        c.restore();
+    }
+    function maxCars() { return clamp(Math.round(W / 420), 2, 6); }
+    function spawnCar(anywhere) {
+        var r = Math.random(), depth = r < 0.6 ? 3 : r < 0.85 ? 2 : 1, dir = Math.random() < 0.5 ? 1 : -1;
+        cars.push({ x: anywhere ? Math.random() * W : (dir > 0 ? -90 * K : W + 90 * K),
+            y: S.laneTop + Math.random() * (S.laneBot - S.laneTop), depth: depth,
+            vx: dir * (TRAFFIC.speed[depth] + Math.random() * TRAFFIC.extra) * K,
+            variant: TRAFFIC.variants[Math.floor(Math.random() * TRAFFIC.variants.length)],
+            col: TRAFFIC.colours[Math.floor(Math.random() * TRAFFIC.colours.length)] });
+    }
+    function updateCars(dt) {
+        for (var i = cars.length - 1; i >= 0; i--) {
+            cars[i].x += cars[i].vx * dt;
+            if (cars[i].x < -140 * K || cars[i].x > W + 140 * K) cars.splice(i, 1);
+        }
+        if (cars.length < maxCars() && Math.random() < TRAFFIC.perSecond * dt) spawnCar(false);
+    }
+    function drawCars() {
+        for (var depth = 1; depth <= 3; depth++) {
+            for (var i = 0; i < cars.length; i++) if (cars[i].depth === depth) drawCar(cars[i]);
+        }
+    }
+
+    // ─── The Overwatch patrol drone ────────────────────────────────────────
+    // The game's patrol drone (_cityDrawPatrolDrone): a heavy wing bar with angular hardpoints, a hex
+    // hull, one red eye and a survey beam. It comes in from one side, crosses and leaves.
+    function drawPatrol(t) {
+        if (!patrol) return;
+        var c = ctx, col = PATROL.col, pulse = 0.5 + Math.sin(t * 3) * 0.5, eye = 0.6 + 0.4 * Math.sin(t * 3);
+        c.save();
+        c.translate(patrol.x, patrol.y);
+        c.scale(patrol.dir * PATROL.scale * K, PATROL.scale * K);
+        var g = c.createLinearGradient(0, 8, 0, 112);
+        g.addColorStop(0, "rgba(255,0,0," + (0.18 * pulse).toFixed(3) + ")");
+        g.addColorStop(1, "rgba(255,0,0,0)");
+        c.fillStyle = g;
+        c.beginPath(); c.moveTo(-5, 8); c.lineTo(5, 8); c.lineTo(30, 112); c.lineTo(-30, 112); c.closePath(); c.fill();
+        c.strokeStyle = col; c.lineWidth = 2.4;
+        line(c, -30, -3, 30, -3);
+        c.fillStyle = "#000000"; c.lineWidth = 1.3;
+        [-30, 30].forEach(function (rx) {
+            c.beginPath(); c.moveTo(rx - 8, -3); c.lineTo(rx, -10); c.lineTo(rx + 8, -3); c.lineTo(rx, 5); c.closePath();
+            c.fill(); c.stroke();
+        });
+        c.beginPath();
+        c.moveTo(-21, 0); c.lineTo(-12, -8); c.lineTo(12, -8); c.lineTo(21, 0); c.lineTo(12, 8); c.lineTo(-12, 8); c.closePath();
+        c.fill(); c.stroke();
+        c.fillStyle = "rgba(255,255,255,0.04)";
+        c.beginPath(); c.moveTo(-12, -8); c.lineTo(12, -8); c.lineTo(8, -3); c.lineTo(-8, -3); c.closePath(); c.fill();
+        c.strokeStyle = "rgba(255,255,255,0.18)"; c.lineWidth = 1;
+        line(c, -12, -8, 12, -8);
+        c.fillStyle = "rgba(255,0,0," + eye.toFixed(2) + ")"; c.shadowBlur = 14 * DPR; c.shadowColor = "#FF0000";
+        c.beginPath(); c.arc(0, 0, 5, 0, Math.PI * 2); c.fill();
+        c.shadowBlur = 0;
+        c.strokeStyle = "rgba(255,40,40,0.9)";
+        c.beginPath(); c.arc(0, 0, 5, 0, Math.PI * 2); c.stroke();
+        c.strokeStyle = col; c.lineWidth = 1.3;
+        line(c, 0, 8, 0, 13);
+        c.fillStyle = "rgba(255,0,0," + (0.55 + 0.45 * pulse).toFixed(2) + ")";
+        c.beginPath(); c.arc(0, 14, 2.4, 0, Math.PI * 2); c.fill();
+        c.restore();
+    }
+    function updatePatrol(t, dt) {
+        if (!patrol) {
+            if (heat >= 80 && patrolAt > t + 2) patrolAt = t + 2;
+            if (t < patrolAt) return;
+            var dir = Math.random() < 0.5 ? 1 : -1;
+            patrol = { x: dir > 0 ? -70 * K : W + 70 * K, y: S.patrolY, dir: dir };
+        }
+        patrol.x += patrol.dir * PATROL.speed * K * dt;
+        patrol.y = S.patrolY + Math.sin(t * 1.3) * 4 * K;
+        if (patrol.x < -80 * K || patrol.x > W + 80 * K) {
+            patrol = null;
+            patrolAt = t + PATROL.every[0] + Math.random() * PATROL.every[1];
+        }
+    }
+
+    // ─── Loose bits and floating words ─────────────────────────────────────
+    function addBit(x, y, vx, vy, col, size, life, grav) {
+        bits.push({ x: x, y: y, vx: vx, vy: vy, col: col, w: size, h: size, life: life, max: life, g: grav === undefined ? 540 * K : grav });
+    }
+    function drawBits(dt) {
+        var gy = S.gy, i, p;
+        ctx.save();
+        for (i = bits.length - 1; i >= 0; i--) {
+            p = bits[i];
+            p.life -= dt;
+            if (p.life <= 0) { bits.splice(i, 1); continue; }
+            if (p.y < gy - 2) { p.vy += p.g * dt; p.x += p.vx * dt; p.y += p.vy * dt; }
+            if (p.y >= gy - 2) { p.y = gy - 2; p.vx = 0; }
+            ctx.globalAlpha = Math.min(1, p.life / (p.max * 0.5));
+            ctx.fillStyle = p.col;
+            ctx.fillRect(p.x - p.w / 2, p.y - p.h, p.w, p.h);
+        }
+        ctx.restore();
+    }
+    function addFloat(x, y, text, col) { floats.push({ x: x, y: y, text: text, col: col, t0: now() }); }
+    function drawFloats(t) {
+        ctx.save();
+        ctx.font = "600 " + Math.max(10, 10 * K).toFixed(1) + "px 'Source Code Pro', monospace";
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        for (var i = floats.length - 1; i >= 0; i--) {
+            var f = floats[i], age = t - f.t0;
+            if (age > 1.4) { floats.splice(i, 1); continue; }
+            ctx.globalAlpha = clamp(1.4 - age, 0, 1);
+            ctx.fillStyle = f.col;
+            ctx.fillText(f.text, clamp(f.x, 40, W - 40), f.y - age * 22 * K);
+        }
+        ctx.restore();
+    }
+
 
     function drawEntrance(c, type, cx, hex) {
         var dTop = -64, hw = 30;
@@ -889,24 +1186,110 @@
         return cone;
     }
 
+    // The game's street tags (GRAFFITI_STYLES in city_graffiti.js), each drawn inside +/-s, with the
+    // points on its lower edge where paint runs.
+    function tagStroke(c, s, col) {
+        c.strokeStyle = col; c.fillStyle = col; c.lineWidth = Math.max(2, s * 0.14); c.lineJoin = "round"; c.lineCap = "round";
+    }
+    function tagPoly(c, pts) {
+        c.beginPath();
+        c.moveTo(pts[0][0], pts[0][1]);
+        for (var i = 1; i < pts.length; i++) c.lineTo(pts[i][0], pts[i][1]);
+        c.closePath();
+    }
+    function tagTerm(c, s, col, lines, cursor) {
+        c.fillStyle = col; c.textAlign = "center"; c.textBaseline = "middle";
+        var longest = lines.reduce(function (m, l) { return Math.max(m, l.length + (cursor ? 1 : 0)); }, 1);
+        var size = Math.min(s * 1.9 / (longest * 0.6), s * 1.6 / lines.length);
+        c.font = "bold " + size.toFixed(1) + "px 'Source Code Pro', monospace";
+        lines.forEach(function (l, i) {
+            var y = (i - (lines.length - 1) / 2) * size * 1.02;
+            c.fillText(l, cursor ? -size * 0.3 : 0, y);
+            if (cursor && i === lines.length - 1) c.fillRect(-size * 0.3 + c.measureText(l).width / 2 + size * 0.12, y - size * 0.42, size * 0.5, size * 0.84);
+        });
+    }
+    var TAG_STYLES = {
+        operator_mark: { drips: [[0, 1], [-0.6, 0.72]], draw: function (c, s, col) {
+            var pts = [], i, a;
+            tagStroke(c, s, col);
+            for (i = 0; i < 6; i++) { a = Math.PI / 6 + i * Math.PI / 3; pts.push([Math.cos(a) * s, Math.sin(a) * s]); }
+            tagPoly(c, pts); c.stroke();
+            c.font = "bold " + (s * 1.05).toFixed(1) + "px cyber, monospace"; c.textAlign = "center"; c.textBaseline = "middle";
+            c.fillText("0", 0, s * 0.06);
+        } },
+        glitch_eye: { drips: [[-0.4, 0.55], [0.4, 0.55]], draw: function (c, s, col) {
+            tagStroke(c, s, col);
+            tagPoly(c, [[-s, 0], [-s * 0.4, -s * 0.55], [s * 0.4, -s * 0.55], [s, 0], [s * 0.4, s * 0.55], [-s * 0.4, s * 0.55]]); c.stroke();
+            c.fillRect(-s * 0.22, -s * 0.22, s * 0.44, s * 0.44);
+            c.fillRect(s * 0.3, -s * 0.12, s * 0.16, s * 0.16);
+        } },
+        bolt: { drips: [[-0.3, 1], [-0.05, 0.1]], draw: function (c, s, col) {
+            tagStroke(c, s, col);
+            tagPoly(c, [[s * 0.25, -s], [-s * 0.6, s * 0.1], [-s * 0.05, s * 0.1], [-s * 0.3, s], [s * 0.6, -s * 0.15], [s * 0.05, -s * 0.15]]); c.stroke();
+        } },
+        crown: { drips: [[-0.7, 0.85], [0.5, 0.85]], draw: function (c, s, col) {
+            tagStroke(c, s, col);
+            tagPoly(c, [[-s, s * 0.55], [-s, -s * 0.5], [-s * 0.5, 0], [0, -s * 0.8], [s * 0.5, 0], [s, -s * 0.5], [s, s * 0.55]]); c.stroke();
+            line(c, -s, s * 0.85, s, s * 0.85);
+        } },
+        null_sig: { drips: [[-0.38, 0.92], [0.38, 0.92]], draw: function (c, s, col) {
+            var pts = [], i, a;
+            tagStroke(c, s, col);
+            for (i = 0; i < 8; i++) { a = Math.PI / 8 + i * Math.PI / 4; pts.push([Math.cos(a) * s, Math.sin(a) * s]); }
+            tagPoly(c, pts); c.stroke();
+            line(c, -s * 0.6, s * 0.6, s * 0.6, -s * 0.6);
+        } },
+        arrow_up: { drips: [[-0.4, 1], [0.3, 1]], draw: function (c, s, col) {
+            tagStroke(c, s, col);
+            c.beginPath();
+            c.moveTo(0, s); c.lineTo(0, -s * 0.85);
+            c.moveTo(-s * 0.7, -s * 0.15); c.lineTo(0, -s * 0.9); c.lineTo(s * 0.7, -s * 0.15);
+            c.moveTo(-s * 0.55, s); c.lineTo(s * 0.55, s);
+            c.stroke();
+        } },
+        circuit: { drips: [[-1, 0.6], [0.9, 0.7]], draw: function (c, s, col) {
+            tagStroke(c, s, col);
+            c.beginPath();
+            c.moveTo(-s, s * 0.6); c.lineTo(-s * 0.3, s * 0.6); c.lineTo(0, 0); c.lineTo(s * 0.5, 0); c.lineTo(s * 0.5, -s * 0.7);
+            c.moveTo(-s * 0.7, -s * 0.8); c.lineTo(-s * 0.7, -s * 0.2); c.lineTo(-s * 0.2, -s * 0.2);
+            c.stroke();
+            [[-s, s * 0.6], [s * 0.5, -s * 0.7], [-s * 0.7, -s * 0.8], [s * 0.9, s * 0.7]].forEach(function (p) {
+                c.beginPath(); c.arc(p[0], p[1], s * 0.13, 0, Math.PI * 2); c.fill();
+            });
+            c.beginPath(); c.moveTo(s * 0.5, 0); c.lineTo(s * 0.9, s * 0.35); c.lineTo(s * 0.9, s * 0.7); c.stroke();
+        } },
+        term_10print: { drips: [[-0.6, 0.3], [0.5, 0.3]], draw: function (c, s, col) { tagTerm(c, s, col, ["10 PRINT"]); } },
+        term_goto10: { drips: [[-0.5, 0.3], [0.6, 0.3]], draw: function (c, s, col) { tagTerm(c, s, col, ["GOTO 10"]); } },
+        term_nocarrier: { drips: [[-0.6, 0.75], [0.4, 0.75]], draw: function (c, s, col) { tagTerm(c, s, col, ["NO", "CARRIER"]); } },
+        term_ath0: { drips: [[-0.6, 0.3], [0.5, 0.3]], draw: function (c, s, col) { tagTerm(c, s, col, ["+++ATH0"]); } },
+        term_ready: { drips: [[-0.6, 0.35], [0.3, 0.35]], draw: function (c, s, col) { tagTerm(c, s, col, ["READY."], true); } }
+    };
+    function tagHalf() { return Math.max(13, TAG_HALF * K); }
+
+    // A tag is revealed left to right while it is sprayed, inside a ring that turns red if the
+    // operator is seen; once done, two runs of paint hang from it.
     function drawTags(t) {
+        var s = tagHalf();
         tags.forEach(function (g) {
-            var p = clamp((t - g.t0) / 0.5, 0, 1), size = Math.max(11, 15 * K), i;
+            var p = clamp((t - g.t0) / TAG_TIME, 0, 1), st = TAG_STYLES[g.style];
             ctx.save();
             ctx.translate(g.x, g.y);
+            ctx.save();
             ctx.rotate(g.rot);
-            ctx.font = "bold " + size.toFixed(1) + "px cyber, monospace";
-            ctx.textAlign = "center";
-            ctx.textBaseline = "middle";
-            var tw = ctx.measureText(g.text).width;
-            ctx.beginPath();
-            ctx.rect(-tw / 2 - 4, -size, (tw + 8) * p, size * 4);
-            ctx.clip();
-            ctx.globalAlpha = 0.88;
-            ctx.fillStyle = g.col;
-            ctx.fillText(g.text, 0, 0);
-            for (i = 0; i < g.drips.length; i++) {
-                ctx.fillRect(-tw / 2 + g.drips[i].at * tw, size * 0.35, 1.5 * K, g.drips[i].len * K * p);
+            if (p < 1) { ctx.beginPath(); ctx.rect(-s * 1.3, -s * 1.6, s * 2.6 * p, s * 3.6); ctx.clip(); }
+            ctx.shadowColor = g.col; ctx.shadowBlur = 6 * DPR;
+            st.draw(ctx, s, g.col);
+            ctx.shadowBlur = 0;
+            ctx.globalAlpha = 0.6; ctx.fillStyle = g.col;
+            st.drips.forEach(function (d, k) {
+                var len = g.len[k] * (s / TAG_HALF) * p;
+                ctx.fillRect(d[0] * s - 0.8, d[1] * s - 1, 1.6, len + 1);
+                ctx.fillRect(d[0] * s - 1.2, d[1] * s + len, 2.4, 2.4);
+            });
+            ctx.restore();
+            if (p < 1) {
+                ctx.strokeStyle = g.seen ? "#FF2020" : g.col; ctx.lineWidth = 1.5;
+                ctx.beginPath(); ctx.arc(0, 0, s * 1.45, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * p); ctx.stroke();
             }
             ctx.restore();
         });
@@ -1013,10 +1396,14 @@
         var f = Math.min(1, dt * 5);
         drone.x += (tx - drone.x) * f;
         drone.y += (ty - drone.y) * f;
+        updateCars(dt);
+        updatePatrol(t, dt);
     }
 
     function updateHeat(t, dt, cone) {
-        seen = !!cone && op.x > cone.x1 && op.x < cone.x2;
+        // seen in the camera's cone, or under the patrol drone's beam
+        seen = (!!cone && op.x > cone.x1 && op.x < cone.x2) || (!!patrol && Math.abs(op.x - patrol.x) < PATROL.beam * K);
+        tags.forEach(function (g) { if (seen && t - g.t0 < TAG_TIME) g.seen = true; });
         if (seen) { heat += HEAT.rise * dt; lastSeen = t; }
         else if (t - lastSeen > HEAT.grace) heat -= HEAT.fall * dt;
         heat = clamp(heat, 0, 100);
@@ -1032,12 +1419,18 @@
     function frame(t, dt) {
         ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
         ctx.clearRect(0, 0, W, H);
-        ctx.drawImage(layer, 0, 0, W, H);
+        ctx.drawImage(backLayer, 0, 0, W, H);
+        drawCars();
+        ctx.drawImage(frontLayer, 0, 0, W, H);
         drawTags(t);
+        drawProps(t);
         S.lamps.forEach(drawLamp);
         var cone = S.cam ? drawCamera(t) : null;
+        drawPatrol(t);
         drawOperator();
         drawDrone();
+        drawBits(dt);
+        drawFloats(t);
         drawScan(t);
         if (dt > 0) drawRain(dt);
         return cone;
@@ -1052,6 +1445,8 @@
 
     // A short blip for the things that answer a click, while the sound is on.
     function sfx(freq, slideTo, dur, type) { if (player) player.blip(freq, slideTo, dur, type); }
+    // A burst of filtered noise: a spray can, a rattle, rushing water.
+    function hiss(seconds, type, freq, vol) { if (player) player.hiss(seconds, type, freq, vol); }
 
     if (soundBtn) {
         if (!player) soundBtn.hidden = true;
@@ -1071,40 +1466,65 @@
     // ─── Things that answer a click ────────────────────────────────────────
     // Nothing marks them (the game's rule for secrets). The operator changes colour, and the page's
     // edge with it; the drone pulses the scanner; the camera burns out for a while, or comes back;
-    // a streetlight breaks or is mended; a bare wall takes a tag.
+    // a streetlight breaks or is mended; a bare wall takes a tag; the vending machine drops a can, a
+    // bin can be rummaged, the hydrant sprays and a tree shakes.
     function setOperatorColour(i) {
         op.colour = i % OP_COLOURS.length;
         var root = document.documentElement.style;
         root.setProperty("--op", OP_COLOURS[op.colour]);
         root.setProperty("--op-rgb", rgbOf(OP_COLOURS[op.colour]));
+        if (backLayer) drawBack();      // the skyline's windows take the operator's colour
     }
 
     function near(x, y, tx, ty, r) { return Math.abs(x - tx) <= r && Math.abs(y - ty) <= r; }
 
     function sprayAt(x, y, t) {
-        var F = FACADE, hit = null;
+        var F = FACADE, hit = null, half = tagHalf() + 4;
         S.near.forEach(function (b) { if (x > b.x && x < b.x + b.w && y > S.gy - b.h && y < S.gy) hit = b; });
-        if (!hit) return;
-        var text = TAGS[tagNext++ % TAGS.length];
-        ctx.save();
-        ctx.font = "bold " + Math.max(11, 15 * K).toFixed(1) + "px cyber, monospace";
-        var half = ctx.measureText(text).width / 2 + 10 * K;
-        ctx.restore();
-        if (hit.w < half * 2 + 8) return;
+        if (!hit || hit.w < half * 2 + 8) return;
         var tx = clamp(x, hit.x + half, hit.x + hit.w - half);
-        var ty = clamp(y, S.gy - hit.h + 22 * K, S.gy - 20 * K);
+        var ty = clamp(y, S.gy - hit.h + half + 4 * K, S.gy - half - 6 * K);
         // doors refuse it
-        if (Math.abs(tx - (hit.x + hit.w / 2)) < 36 * K + half && ty > S.gy - 90 * K) ty = S.gy - (F.storeH + 26) * K;
+        if (Math.abs(tx - (hit.x + hit.w / 2)) < 36 * K + half && ty > S.gy - 90 * K - half) ty = S.gy - F.storeH * K - half - 6 * K;
         var r = rng(Math.floor(x * 31 + y * 17) + tagNext);
-        tags.push({ x: tx, y: ty, text: text, col: OP_COLOURS[op.colour], rot: (r() - 0.5) * 0.16, t0: t,
-            drips: [{ at: 0.15 + r() * 0.2, len: 6 + r() * 12 }, { at: 0.55 + r() * 0.3, len: 4 + r() * 9 }] });
+        tags.push({ x: tx, y: ty, style: TAG_ORDER[tagNext++ % TAG_ORDER.length], col: OP_COLOURS[op.colour], rot: (r() - 0.5) * 0.16,
+            t0: t, seen: seen, len: [4 + r() * 9, 4 + r() * 9] });
         if (tags.length > TAG_MAX) tags.shift();
-        sfx(1800, 900, 0.22, "sawtooth");
+        hiss(0.5, "highpass", 3600, 0.1);
         if (seen) heat = clamp(heat + HEAT.tag, 0, 100);
     }
 
+    function useProp(p, t) {
+        var gy = S.gy, i, dir;
+        if (p.kind === "vending") {
+            var br = VEND_BRANDS[p.idx % VEND_BRANDS.length];
+            bits.push({ x: p.x - 4 * K, y: gy - 10 * K, vx: -26 * K, vy: -70 * K, col: br.col, w: 4 * K, h: 7 * K, life: 2.6, max: 2.6, g: 540 * K });
+            addFloat(p.x, gy - 70 * K, "-5 BITS", "#FFD700");
+            sfx(150, 60, 0.14, "sine");
+        } else if (p.kind === "bin") {
+            p.shakeUntil = t + 0.5;
+            for (i = 0; i < 6; i++) addBit(p.x + (Math.random() - 0.5) * 14 * K, gy - 30 * K, (Math.random() - 0.5) * 120 * K, -(60 + Math.random() * 90) * K, ["#39FF14", "#00DFFF", "#737b9e"][i % 3], 2.2 * K, 1.1);
+            addFloat(p.x, gy - 46 * K, p.used ? "EMPTY" : "+3 BITS", p.used ? "#737b9e" : "#FFD700");
+            p.used = true;
+            hiss(0.18, "bandpass", 900, 0.16);
+        } else if (p.kind === "hydrant") {
+            // a jet out of each cap, a little lift, then gravity (the game's own spray)
+            [-1, 1].forEach(function (d) {
+                for (i = 0; i < 11; i++) addBit(p.x + d * 11 * K, gy - 15 * K + (Math.random() - 0.5) * 3, d * (96 + Math.random() * 144) * K, -(18 + Math.random() * 78) * K, ["#00DFFF", "#2BD1FC", "#7BFFF0", "#FFFFFF"][i % 4], (1.2 + Math.random() * 1.6) * K, 0.8 + Math.random() * 0.8);
+            });
+            hiss(0.7, "bandpass", 2400, 0.12);
+        } else if (p.kind === "tree") {
+            p.shakeUntil = t + 0.8;
+            for (i = 0; i < 5; i++) { dir = (Math.random() - 0.5); addBit(p.x + dir * 40 * K, gy - (50 + Math.random() * 30) * K, dir * 40 * K, 10 * K, i % 2 ? "#2CC30F" : "#5BE83C", 2.4 * K, 1.6, 120 * K); }
+            hiss(0.35, "highpass", 5200, 0.07);
+        } else {
+            return false;
+        }
+        return true;
+    }
+
     function onClick(e) {
-        var r = canvas.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top, t = now(), i, l;
+        var r = canvas.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top, t = now(), i, l, p, box;
         var pad = Math.max(16, 16 * K);
         if (near(x, y, op.x, S.gy - OP.h * K / 2, Math.max(pad, OP.h * K / 2 + 4))) { setOperatorColour(op.colour + 1); sfx(660, 990, 0.09); return; }
         if (near(x, y, drone.x, drone.y, pad + 4)) { scan = { t0: t, x: op.x, y: S.gy - OP.h * K / 2 }; sfx(420, 1680, 0.5, "sine"); return; }
@@ -1119,6 +1539,13 @@
                 l.broken = !l.broken;
                 sfx(l.broken ? 240 : 480, l.broken ? 90 : 720, 0.12);
                 return;
+            }
+        }
+        for (i = 0; i < S.props.length; i++) {
+            p = S.props[i]; box = PROP_BOX[p.kind];
+            if (Math.abs(x - p.x) <= Math.max(12, box[0] * K) && y < S.gy + 4 && y > S.gy - box[1] * K - 4) {
+                if (useProp(p, t)) return;
+                break;
             }
         }
         sprayAt(x, y, t);
