@@ -66,17 +66,55 @@
     var layer = null;       // sky, backdrop, facades and street, drawn once per resize
     var S = null;           // layout of the current scene
     var rain = [];
+    var copyEl = document.querySelector(".hero-copy"), barEl = document.querySelector(".bar"), copySig = "";
+
+    // Where the words are, relative to the canvas: one box per line of copy.
+    function copyBoxes(r) {
+        var kids = copyEl ? Array.prototype.slice.call(copyEl.children) : [];
+        return kids.map(function (el) {
+            var q = el.getBoundingClientRect();
+            return { l: Math.round(q.left - r.left), r: Math.round(q.right - r.left), b: Math.round(q.bottom - r.top) };
+        });
+    }
+    function boxesSig(boxes) { return boxes.map(function (q) { return q.l + "," + q.r + "," + q.b; }).join(";"); }
 
     var BUILDINGS = [
-        { name: "MARKET ROW",   hex: "#00DFFF", w: 620, h: 380, ent: 0 },
-        { name: "PIXEL ARCADE", hex: "#FF1493", w: 560, h: 430, ent: 3 },
-        { name: "SUBGRID HUB",  hex: "#8A2BE2", w: 600, h: 400, ent: 1 },
-        { name: "CHIP CLINIC",  hex: "#39FF14", w: 640, h: 440, ent: 0 },
-        { name: "GRID TOWER",   hex: "#00DFFF", w: 520, h: 460, ent: 3 },
-        { name: "CIPHER STACK", hex: "#FF1493", w: 600, h: 410, ent: 1 }
+        { name: "MARKET ROW",   hex: "#00DFFF", w: 620, h: 450, ent: 0, roof: [[0.2, "junction"], [0.5, "beacon"], [0.8, "junction"]] },
+        { name: "PIXEL ARCADE", hex: "#FF1493", w: 560, h: 560, ent: 3, tall: true, roof: [[0.2, "dishbox"], [0.5, "tank"], [0.82, "beacon"]],
+          posters: [{ side: -1, yf: 0.28, art: "overdrive", title: "OVERDRIVE", col: "#FF1493" }, { side: -1, yf: 0.6, art: "shatter", title: "SHATTER", col: "#FF8C00" }] },
+        { name: "SUBGRID HUB",  hex: "#8A2BE2", w: 600, h: 400, ent: 1, roof: [[0.2, "tank"], [0.5, "junction"], [0.82, "ventbox"]] },
+        { name: "CHIP CLINIC",  hex: "#39FF14", w: 640, h: 440, ent: 0, roof: [[0.2, "beacon"], [0.5, "dishbox"], [0.82, "junction"]] },
+        { name: "GRID TOWER",   hex: "#00DFFF", w: 520, h: 460, ent: 3, roof: [[0.2, "ventbox"], [0.5, "junction"], [0.82, "tank"]] },
+        { name: "CIPHER STACK", hex: "#FF1493", w: 600, h: 410, ent: 1, roof: [[0.2, "junction"], [0.5, "ventbox"], [0.82, "dishbox"]] }
     ];
+    // The game's five roof gadgets and how far each rises above the deck, in its pixels. One that
+    // would reach the words above it gives way to a plant cabinet, the only low one, or is left off.
+    var ROOF_H = { junction: 52, beacon: 100, ventbox: 110, tank: 140, dishbox: 144 };
+    // the room kept above a roof, where the screen has it: enough for the tallest gadget planned for it
+    function roofSpace(def) {
+        return def.roof.reduce(function (m, g) { return Math.max(m, ROOF_H[g[1]]); }, 0) + 8;
+    }
+    var POSTER = { w: 56, h: 74, off: 16 };
+    // Street furniture for each gap between buildings, as [distance from the gap's start, kind]. The
+    // streetlight stands near the middle; everything keeps clear of it and of the walls either side.
+    var STREET = [
+        [[54, "bench"], [176, "vending"], [226, "bin"]],
+        [[50, "tree"], [205, "cabinet"], [262, "bin"]],
+        [[40, "bin"], [170, "bench"]],
+        [[48, "vending"], [230, "bench"], [290, "bin"]],
+        [[62, "cabinet"], [200, "tree"]],
+        [[60, "bench"], [200, "vending"], [252, "bin"]]
+    ];
+    var VEND_BRANDS = [
+        { name: "COOLANT+", col: "#7CF9FF", stock: ["#7CF9FF", "#39FF14", "#FFFFFF"] },
+        { name: "SYNTH SNAX", col: "#FF7A00", stock: ["#FF7A00", "#FFD24A", "#FF1493"] },
+        { name: "VOLTAIC", col: "#FFD24A", stock: ["#FFD24A", "#00DFFF", "#B14FFF"] },
+        { name: "NEON NOODLES", col: "#FF1493", stock: ["#FF1493", "#FFFFFF", "#7CF9FF"] }
+    ];
+    var CABINET_STREET = { body: "#0f2418", face: "#143222", edge: "#2FBF71", dim: "rgba(47,191,113,0.45)" };
+    var CABINET_ROOF = { body: "#171b20", face: "#20252c", edge: "#8A96A3", dim: "rgba(138,150,163,0.45)" };
     var GAPS = [260, 300, 240, 320, 280, 300];
-    var FACADE = { winW: 18, winH: 26, gapX: 36, gapY: 46, pad: 36, storeH: 114, bayW: 60, corner: 10, edge: 4, edgeAlpha: 0.42, signY: 134, plateH: 20 };
+    var FACADE = { winW: 18, winH: 26, gapX: 36, gapY: 46, pad: 36, padMin: 14, storeH: 114, bayW: 60, corner: 10, edge: 4, edgeAlpha: 0.42, signY: 134, plateH: 20 };
     var FAR = [
         { body: "#160720", win: "#6a1456" },
         { body: "#0a0c1c", win: "#263a70" },
@@ -85,7 +123,7 @@
     var LAMP = { poleH: 168, baseW: 12, baseH: 38, taperH: 10, doorW: 8, doorTop: 35, doorBot: 23 };
     // Overwatch hardware: black body, grey edge, red only in the eye and the beam.
     var CAM = { body: "#000000", edge: "#6E6E6E", eye: "#FF0000", sweep: 0.75, half: 0.2, rate: 0.45, downFor: 12, height: 150 };
-    var OP = { w: 26, h: 38, speed: 150 };
+    var OP = { w: 26, h: 38, speed: 150, still: 48 };     // still: how near the pointer may come before the operator stops following
     var OP_COLOURS = ["#FF1493", "#00DFFF", "#39FF14", "#FF3E00", "#8A2BE2"];
     var HEAT = { rise: 34, fall: 14, grace: 1.2, tag: 20, cam: 30 };
     var SCAN = { range: 900, time: 0.7, show: 6 };
@@ -95,7 +133,7 @@
     var op = { x: 0, dir: 1, target: 0, wanderAt: 0, colour: 0 };
     var drone = { x: 0, y: 0 };
     var tags = [], tagNext = 0, scan = null, camDownUntil = 0;
-    var heat = 0, seen = false, lastSeen = -10, lastPointer = -10, lastHud = -1;
+    var heat = 0, seen = false, lastSeen = -10, lastPointer = -10, lastHud = -1, pointerIn = false;
 
     function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
     // The scene's own clock: the time of the frame being drawn. Clicks are stamped with it, since
@@ -122,32 +160,52 @@
         W = Math.max(1, Math.round(r.width));
         H = Math.max(1, Math.round(r.height));
         DPR = Math.min(window.devicePixelRatio || 1, 2);
-        K = clamp(Math.min(W / 1100, H / 760), 0.62, 1.2);
+        K = clamp(Math.min(W / 1100, H / 760), 0.62, 1.05);
         canvas.width = Math.round(W * DPR);
         canvas.height = Math.round(H * DPR);
 
         var rand = rng(8086);
         var gy = H - Math.round(86 * K);
-        S = { gy: gy, far: [], near: [], lamps: [], cam: null };
+        // The skyline stays under the words. Each stretch of street has its own ceiling: the lowest
+        // line of copy above it, or the header where there is none, so a building beside the text
+        // may stand taller than one beneath it.
+        var boxes = copyBoxes(r), barBottom = barEl ? Math.round(barEl.getBoundingClientRect().bottom - r.top) : 40;
+        copySig = boxesSig(boxes);
+        var roomOver = function (x0, x1) {
+            var ceiling = barBottom;
+            boxes.forEach(function (q) { if (q.r > q.l && q.r > x0 - 16 && q.l < x1 + 16) ceiling = Math.max(ceiling, q.b); });
+            return gy - ceiling - 22;
+        };
+        S = { gy: gy, far: [], near: [], lamps: [], props: [], cam: null };
 
         var x = -40 * K, w, h;
         while (x < W + 40) {
             w = (90 + rand() * 120) * K;
-            h = Math.min((200 + rand() * 260) * K, H * 0.62);
+            h = Math.max(60 * K, Math.min((200 + rand() * 260) * K, roomOver(x, x + w) * (0.72 + rand() * 0.28), H * 0.62));
             S.far.push({ x: x, w: w, h: h, pal: FAR[Math.floor(rand() * FAR.length)], seed: Math.floor(rand() * 1e6) });
             x += w + (rand() < 0.3 ? rand() * 30 * K : 0);
         }
 
+        // On a wide screen the street is slid along so the second building, the arcade, starts just
+        // past the end of the words, where it can stand at its full height. If that leaves bare
+        // street at the left edge, one more building goes in before the first.
+        var count = BUILDINGS.length, copyRight = 0, i = 0, def, gap, room, slot;
+        boxes.forEach(function (q) { copyRight = Math.max(copyRight, q.r); });
         x = -200 * K;
-        var i = 0, def, gap;
+        if (W - copyRight > 300 * K) x = Math.max(x, copyRight + 24 - (BUILDINGS[0].w + GAPS[0]) * K);
+        if (x > -40 * K) { i = -1; x -= (BUILDINGS[count - 1].w + GAPS[count - 1]) * K; }
         while (x < W + 40) {
-            def = BUILDINGS[i % BUILDINGS.length];
+            slot = ((i % count) + count) % count;
+            def = BUILDINGS[slot];
             w = def.w * K;
-            h = Math.min(def.h * K, H * 0.42);
-            S.near.push({ x: x, w: w, h: h, def: def, idx: i });
-            gap = GAPS[i % GAPS.length] * K;
+            // a facade keeps its ground storey and a row of windows; the rest of the room is for its roof
+            room = roomOver(x, x + w);
+            h = Math.max(150 * K, Math.min(def.h * K, room - roofSpace(def) * K));
+            S.near.push({ x: x, w: w, h: h, def: def, idx: i, room: room });
+            gap = GAPS[slot] * K;
+            S.props.push({ x: x + w, set: STREET[slot], idx: slot });
             // the lamp's light falls a little to its right, so the post stands left of the gap's middle
-            S.lamps.push({ x: x + w + gap / 2 - 22 * K, broken: !!broken[i] });
+            S.lamps.push({ x: x + w + gap / 2 - 22 * K, broken: !!broken[S.lamps.length] });
             x += w + gap;
             i++;
         }
@@ -160,7 +218,7 @@
         });
         if (best) {
             var lo = Math.max(best.x, 0) + 70 * K, hi = Math.min(best.x + best.w, W) - 70 * K;
-            S.cam = { x: clamp(best.x + best.w * 0.8, lo, Math.max(lo, hi)), y: gy - CAM.height * K };
+            S.cam = { x: clamp(best.x + best.w * 0.8, lo, Math.max(lo, hi)), y: gy - Math.min(CAM.height * K, best.h - 30 * K) };
         }
 
         layer = document.createElement("canvas");
@@ -212,6 +270,15 @@
         });
 
         S.near.forEach(function (b) { drawBuilding(c, b); });
+        S.props.forEach(function (g) {
+            g.set.forEach(function (it) {
+                c.save();
+                c.translate(g.x + it[0] * K, gy - 1);
+                c.scale(K, K);
+                STREET_DRAW[it[1]](c, g.idx);
+                c.restore();
+            });
+        });
 
         // Street: kerb line, lane dashes and the two service conduits under it. The foot of the band
         // is left clear for the HEAT readout.
@@ -252,6 +319,8 @@
         var padX = (w - ((ncols - 1) * F.gapX + F.winW)) / 2;
         var zoneH = h - F.storeH;
         var nrows = Math.max(1, Math.floor((zoneH - 2 * F.pad - F.winH) / F.gapY) + 1);
+        // a short wall closes up its top and bottom padding to fit another row or two
+        if (nrows < 3) nrows = Math.max(nrows, Math.min(3, Math.floor((zoneH - 2 * F.padMin - F.winH) / F.gapY) + 1));
         var padY = (zoneH - ((nrows - 1) * F.gapY + F.winH)) / 2;
         c.lineWidth = 1;
         for (row = 0; row < nrows; row++) {
@@ -306,9 +375,19 @@
         c.lineWidth = 1.5;
         line(c, 0, 0, w, 0);
 
-        // Roof: a dark cap and the deck rail.
+        // Roof: a dark cap, whatever stands on the deck, and the deck rail.
         c.fillStyle = "#141028";
         c.fillRect(0, top - 4, w, 4);
+        var spare = (b.room - b.h) / K - 6;
+        b.def.roof.forEach(function (g, gi) {
+            var kind = g[1];
+            if (ROOF_H[kind] > spare) kind = "junction";
+            if (ROOF_H[kind] > spare) return;
+            c.save();
+            c.translate(w * g[0], top - 4);
+            ROOF_DRAW[kind](c, hex, Math.abs(b.idx * 7 + gi));
+            c.restore();
+        });
         c.strokeStyle = rgba(hex, 0.3);
         c.lineWidth = 1;
         line(c, 14, top - 18, w - 14, top - 18);
@@ -344,8 +423,372 @@
         c.textAlign = "center";
         c.textBaseline = "middle";
         c.fillText(b.def.name, doorX, signY + 1);
+
+        // Game posters on hoardings off the building's edge, where the wall is tall enough for them.
+        (b.def.posters || []).forEach(function (p) {
+            var py = top + h * p.yf;
+            if (py + POSTER.h > sfTop - 12) return;
+            var edge = p.side === 1 ? w : 0, inner = edge + p.side * POSTER.off, px = p.side === 1 ? inner : inner - POSTER.w;
+            c.strokeStyle = "#2a2142"; c.lineWidth = 2.5; c.shadowBlur = 0;
+            c.beginPath();
+            c.moveTo(edge, py + 12); c.lineTo(inner, py + 12);
+            c.moveTo(edge, py + POSTER.h - 12); c.lineTo(inner, py + POSTER.h - 12);
+            c.moveTo(edge, py + 12); c.lineTo(inner, py + POSTER.h - 12);
+            c.stroke();
+            c.save();
+            c.translate(px + POSTER.w / 2, py + POSTER.h / 2);
+            c.scale(POSTER.w / 44, POSTER.w / 44);
+            drawPoster(c, p);
+            c.restore();
+        });
         c.restore();
     }
+
+    // A game poster in the game's own 44 by 56 format: the art, a tinted foot and the title.
+    var POSTER_ART = {
+        overdrive: { bg: "#0D0320", draw: function (c) {
+            var bands = ["#FFD700", "#FF8C00", "#FF5F5F", "#FF1493"], k, y;
+            pRect(c, -19, -25, 38, 12, "#1A0636");
+            c.save();                                                       // the banded sun on the horizon
+            c.beginPath(); c.rect(-19, -25, 38, 19); c.clip();
+            c.beginPath(); c.arc(0, -6, 11, 0, Math.PI * 2); c.clip();
+            for (k = 0; k < 4; k++) pRect(c, -11, -17 + k * 2.9, 22, 2.9, bands[k]);
+            c.fillStyle = "#0D0320";
+            for (k = 0; k < 3; k++) c.fillRect(-11, -9.5 + k * 1.4, 22, 0.3 + k * 0.25);
+            c.restore();
+            pPoly(c, [-19, -6, -14, -11, -9, -7, -4, -12, 1, -6], null, "#3A0F5C");
+            pPoly(c, [4, -6, 10, -12, 15, -8, 19, -11, 19, -6], null, "#3A0F5C");
+            pRect(c, -19, -6, 38, 21, "#07020E");
+            pLine(c, [-19, -6, 19, -6], "#FF1493", 0.8);
+            for (k = 0; k < 4; k++) { y = -4 + k * k * 1.6; pLine(c, [-19, y, 19, y], "rgba(0,223,255,0.25)", 0.5); }
+            pPoly(c, [-1.2, -6, 1.2, -6, 18, 15, -18, 15], null, "#16161E");   // the road
+            pLine(c, [-1.2, -6, -18, 15], "#FF1493", 0.9);
+            pLine(c, [1.2, -6, 18, 15], "#FF1493", 0.9);
+            c.setLineDash([2, 2.5]);
+            pLine(c, [0, -5, 0, 15], "rgba(255,215,0,0.8)", 0.6);
+            c.setLineDash([]);
+            pRect(c, -5, 8, 10, 4, "#25253A");                               // the car
+            pRect(c, -4, 6.5, 8, 2, "#3A3A55");
+            pRect(c, -5, 9, 2.2, 1.2, "#FF3E3E");
+            pRect(c, 2.8, 9, 2.2, 1.2, "#FF3E3E");
+        } },
+        shatter: { bg: "#0B0610", draw: function (c) {
+            var rows = ["#FF3E3E", "#FF8C00", "#FFD700", "#39FF14", "#00DFFF"];
+            var gone = { "1_2": 1, "2_2": 1, "2_3": 1, "3_1": 1, "3_2": 1, "3_3": 1, "4_2": 1, "4_4": 1, "0_5": 1 }, r, k;
+            for (r = 0; r < rows.length; r++) {
+                for (k = 0; k < 6; k++) {
+                    if (!gone[r + "_" + k]) pRect(c, -18 + k * 6.1, -23 + r * 3.6, 5.3, 2.8, rows[r]);
+                }
+            }
+            pLine(c, [-10, 11, -5, 3, 0, -3], "rgba(255,255,255,0.3)", 0.8);
+            pCircle(c, 1, -4.5, 1.5, null, "#FFFFFF");
+            pRect(c, 9, -2, 2.4, 2.4, "#00DFFF");
+            pLine(c, [10.2, -5, 10.2, -3], "rgba(0,223,255,0.5)", 0.6);
+            pRect(c, -9, 11, 12, 2.2, "#FF1493");
+            pRect(c, -9, 11, 12, 0.7, "#FFB6DD");
+        } }
+    };
+    function pRect(c, x, y, w, h, col) { c.fillStyle = col; c.fillRect(x, y, w, h); }
+    function pPath(c, pts, close) {
+        c.beginPath();
+        for (var i = 0; i < pts.length; i += 2) { if (i) c.lineTo(pts[i], pts[i + 1]); else c.moveTo(pts[i], pts[i + 1]); }
+        if (close) c.closePath();
+    }
+    function pPoly(c, pts, stroke, fill, lw) {
+        pPath(c, pts, true);
+        if (fill) { c.fillStyle = fill; c.fill(); }
+        if (stroke) { c.strokeStyle = stroke; c.lineWidth = lw || 1; c.stroke(); }
+    }
+    function pLine(c, pts, col, lw) { pPath(c, pts, false); c.strokeStyle = col; c.lineWidth = lw || 1; c.stroke(); }
+    function pCircle(c, x, y, r, stroke, fill, lw) {
+        c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2);
+        if (fill) { c.fillStyle = fill; c.fill(); }
+        if (stroke) { c.strokeStyle = stroke; c.lineWidth = lw || 1; c.stroke(); }
+    }
+    function drawPoster(c, p) {
+        var art = POSTER_ART[p.art];
+        c.fillStyle = art.bg; c.fillRect(-22, -28, 44, 56);
+        c.fillStyle = rgba(p.col, 0.12); c.fillRect(-22, 16, 44, 12);
+        c.save();
+        c.beginPath(); c.rect(-19, -25, 38, 40); c.clip();
+        art.draw(c);
+        c.restore();
+        c.strokeStyle = rgba(p.col, 0.45); c.lineWidth = 0.5; c.strokeRect(-19, -25, 38, 40);
+        c.fillStyle = p.col; c.font = "bold 5.5px 'Source Code Pro', monospace"; c.textAlign = "center"; c.textBaseline = "middle";
+        c.fillText(p.title, 0, 21.5);
+        c.strokeStyle = rgba(p.col, 0.7); c.lineWidth = 1; c.strokeRect(-22, -28, 44, 56);
+    }
+
+    // ─── Roof gadgets and street furniture ─────────────────────────────────
+    // Each is drawn in the game's pixels with the origin at its foot: on the roof deck or the street.
+    // The street pieces follow the game's own (drawCityBench, drawCityBin, drawCityVendingMachine,
+    // drawCityTree, drawCityCabinet); the roof pieces follow its roof gadgets.
+    function boxFillOf(hex) {
+        var n = parseInt(hex.slice(1), 16);
+        return "rgb(" + Math.floor(((n >> 16) & 255) * 0.14) + "," + Math.floor(((n >> 8) & 255) * 0.14) + "," + Math.floor((n & 255) * 0.14) + ")";
+    }
+
+    function drawCabinet(c, doors, C) {
+        var w = [0, 32, 58, 84][doors], h = [0, 42, 38, 36][doors], x0 = -w / 2, top = -4 - h, dw = w / doors, d, v;
+        c.fillStyle = C.body; c.fillRect(x0, top, w, h);
+        c.strokeStyle = C.edge; c.lineWidth = 1; c.globalAlpha = 0.85; c.strokeRect(x0 + 0.5, top + 0.5, w - 1, h - 1); c.globalAlpha = 1;
+        c.fillStyle = "#2a2d34"; c.fillRect(x0 - 3, -4, w + 6, 4);                                  // the plinth
+        c.fillStyle = C.edge; c.globalAlpha = 0.35; c.fillRect(x0 - 3, -4, w + 6, 1); c.globalAlpha = 1;
+        c.fillStyle = C.face;                                                                       // the sloped lid
+        c.beginPath(); c.moveTo(x0 - 3, top); c.lineTo(x0 + 3, top - 5); c.lineTo(x0 + w - 3, top - 5); c.lineTo(x0 + w + 3, top); c.closePath(); c.fill();
+        c.strokeStyle = C.dim; c.stroke();
+        for (d = 0; d < doors; d++) {
+            var dx = x0 + d * dw;
+            if (d > 0) line(c, Math.round(dx) + 0.5, top + 3, Math.round(dx) + 0.5, top + h - 3);
+            c.strokeStyle = C.dim; c.strokeRect(Math.round(dx + 3) + 0.5, top + 4.5, Math.round(dw - 6) - 1, h - 10);
+            c.fillStyle = C.edge; c.globalAlpha = 0.7; c.fillRect(Math.round(d % 2 === 0 ? dx + dw - 6 : dx + 4), top + h * 0.44, 2, 7); c.globalAlpha = 1;
+            c.fillStyle = "rgba(200,210,220,0.55)"; c.fillRect(Math.round(dx + dw / 2) - 1, top + 8, 2, 2);
+        }
+        c.strokeStyle = C.dim;
+        for (v = 0; v < 5; v++) line(c, x0 + 7, top + h - 20 + v * 2.5, x0 + Math.min(dw - 6, 16), top + h - 20 + v * 2.5);
+        c.fillStyle = "#FFD24A"; c.fillRect(x0 + w - 9, top + 12, 4, 4);                           // a hazard sticker
+    }
+
+    // The game's roof gadgets (_cityRoofGadget, _cityDishStand, _cityDishHead, drawCityWaterTower).
+    function strokePath(c, pts) {
+        c.beginPath();
+        for (var i = 0; i < pts.length; i += 4) { c.moveTo(pts[i], pts[i + 1]); c.lineTo(pts[i + 2], pts[i + 3]); }
+        c.stroke();
+    }
+
+    var ROOF_DRAW = {
+        // a rooftop plant cabinet: one, two or three doors, in galvanised grey, navy or the building's colours
+        junction: function (c, hex, seed) {
+            var pals = [CABINET_ROOF, { body: "#0c1426", face: "#122038", edge: "#4D7FD1", dim: "rgba(77,127,209,0.45)" },
+                { body: boxFillOf(hex), face: boxFillOf(hex), edge: rgba(hex, 0.5), dim: rgba(hex, 0.18) }];
+            c.fillStyle = "rgba(0,0,0,0.7)";
+            var doors = [2, 1, 3][seed % 3], w = [0, 32, 58, 84][doors];
+            c.fillRect(-w / 2 - 4, 0, w + 8, 3);
+            c.translate(0, 2);
+            drawCabinet(c, doors, pals[(seed * 7 + 3) % pals.length]);
+        },
+        beacon: function (c, hex, seed) {
+            var soft = rgba(hex, 0.5), k;
+            c.strokeStyle = soft; c.lineWidth = 2.5;
+            line(c, 0, 0, 0, -76);
+            c.lineWidth = 1;
+            for (k = 0; k < 3; k++) line(c, -6 + k * 6, 0, -6 + k * 6, -22 - k * 6);
+            [-20, 22].forEach(function (po, pk) {                                                       // neighbour poles
+                var ph = 40 + ((seed * 5 + pk * 13) % 26);
+                c.strokeStyle = soft; c.lineWidth = 1.5;
+                line(c, po, 0, po, -ph);
+                if (pk === 0) { c.fillStyle = "rgba(0,223,255,0.7)"; c.fillRect(po - 2, -ph * 0.6, 4, 4); }
+            });
+            c.globalAlpha = 0.3; c.fillStyle = "#FF3300";
+            c.beginPath(); c.arc(0, -83, 16, 0, Math.PI * 2); c.fill();
+            c.globalAlpha = 1; c.fillStyle = "#FF5533";
+            c.beginPath(); c.arc(0, -83, 7, 0, Math.PI * 2); c.fill();
+        },
+        ventbox: function (c, hex) {
+            var y;
+            c.fillStyle = "rgba(0,0,0,0.7)"; c.fillRect(-33, 0, 66, 3);
+            c.fillStyle = boxFillOf(hex); c.fillRect(-29, -70, 58, 72);
+            c.strokeStyle = rgba(hex, 0.5); c.lineWidth = 1.5; c.strokeRect(-29, -70, 58, 72);
+            c.strokeStyle = rgba(hex, 0.18); c.lineWidth = 1;
+            for (y = -56; y < -4; y += 15) line(c, -25, y, 25, y);
+            c.fillStyle = "#39FF14"; c.fillRect(-22, -62, 6, 6);
+            c.fillStyle = "#100c22"; c.strokeStyle = "rgba(180,180,200,0.35)"; c.lineWidth = 1.5;          // the fan bank on top
+            c.fillRect(-22, -88, 44, 18); c.strokeRect(-22, -88, 44, 18);
+            c.beginPath(); c.arc(0, -79, 7, 0, Math.PI * 2); c.stroke();
+            c.strokeStyle = rgba(hex, 0.5);
+            line(c, 17, -88, 17, -106);
+        },
+        dishbox: function (c, hex, seed) {
+            var soft = rgba(hex, 0.5), y, i, n = 3, hw = 13, botY = -72, topY = -106;
+            c.fillStyle = "rgba(0,0,0,0.7)"; c.fillRect(-33, 0, 66, 3);
+            c.fillStyle = boxFillOf(hex); c.fillRect(-29, -72, 58, 74);
+            c.strokeStyle = soft; c.lineWidth = 1.5; c.strokeRect(-29, -72, 58, 74);
+            c.strokeStyle = rgba(hex, 0.18); c.lineWidth = 1;
+            for (y = -58; y < -4; y += 16) line(c, -25, y, 25, y);
+            line(c, 0, -68, 0, -2);
+            // the stocky scaffold stand: two tapered legs, rungs and cross-braces
+            c.strokeStyle = "#3a3358"; c.lineWidth = 3;
+            strokePath(c, [-hw, botY, -hw * 0.6, topY, hw, botY, hw * 0.6, topY]);
+            c.lineWidth = 1.4;
+            for (i = 0; i <= n; i++) {
+                var f = i / n, yy = botY + (topY - botY) * f, w2 = hw * (1 - 0.4 * f);
+                line(c, -w2, yy, w2, yy);
+            }
+            for (i = 0; i < n; i++) {
+                var f0 = i / n, f1 = (i + 1) / n, y0 = botY + (topY - botY) * f0, y1 = botY + (topY - botY) * f1;
+                var w0 = hw * (1 - 0.4 * f0), w1 = hw * (1 - 0.4 * f1);
+                strokePath(c, [-w0, y0, w1, y1, w0, y0, -w1, y1]);
+            }
+            // the dish: an arc, an inner arc and the rim's chord, aimed a little off straight up
+            var R = 36, ang = [-0.55, -0.38, -0.22, 0.22, 0.38, 0.55, 0][seed % 7], a = Math.PI * 0.20, b2 = Math.PI * 0.80;
+            c.save();
+            c.translate(0, topY);
+            c.rotate(ang);
+            c.strokeStyle = rgba(hex, 0.7); c.lineWidth = 3;
+            c.beginPath(); c.arc(0, -R, R, a, b2); c.stroke();
+            c.lineWidth = 1;
+            c.beginPath(); c.arc(0, -R, R * 0.6, a, b2); c.stroke();
+            line(c, R * Math.cos(a), -R + R * Math.sin(a), R * Math.cos(b2), -R + R * Math.sin(b2));
+            c.strokeStyle = "#3a3358"; c.lineWidth = 2;
+            line(c, 0, 0, 0, -14);
+            c.fillStyle = rgba(hex, 0.95);
+            c.beginPath(); c.arc(0, 0, 4.5, 0, Math.PI * 2); c.fill();
+            c.restore();
+        },
+        // the water tower: a stave tank on a braced stand, with a catwalk, hoops, a cap and a ladder
+        tank: function (c, hex) {
+            var w = 78, h = 80, legH = 26, hw = w / 2, tb = -5 - legH, ty = tb - h, steel = "#262a36";
+            var lineCol = rgba(hex, 0.5), faint = rgba(hex, 0.18), x, y, k;
+            c.fillStyle = steel; c.fillRect(-hw - 8, -5, w + 16, 5);                                    // grillage beam
+            c.strokeStyle = faint; c.lineWidth = 1; line(c, -hw - 8, -4.5, hw + 8, -4.5);
+            c.strokeStyle = steel; c.lineWidth = 2.5;                                                   // the stand
+            strokePath(c, [-w / 6, tb, -w / 6, -5, w / 6, tb, w / 6, -5]);
+            c.strokeStyle = "rgba(140,160,180,0.5)"; c.lineWidth = 1.1;
+            strokePath(c, [-hw + 5, tb, hw + 3, -5, hw - 5, tb, -hw - 3, -5]);
+            c.strokeStyle = steel; c.lineWidth = 3.5;
+            strokePath(c, [-hw + 5, tb, -hw - 3, -5, hw - 5, tb, hw + 3, -5]);
+            c.fillStyle = steel; c.fillRect(-hw - 6, tb - 2, w + 12, 3);                                // catwalk
+            c.strokeStyle = faint; c.lineWidth = 1;
+            strokePath(c, [-hw - 6, tb - 11, -hw - 6, tb - 2, hw + 6, tb - 11, hw + 6, tb - 2, -hw - 6, tb - 11, -hw, tb - 11, hw, tb - 11, hw + 6, tb - 11]);
+            c.fillStyle = "#171130"; c.strokeStyle = lineCol; c.lineWidth = 1.5;                        // the tank
+            c.fillRect(-hw, ty, w, h); c.strokeRect(-hw, ty, w, h);
+            c.strokeStyle = faint; c.lineWidth = 1;
+            for (x = -hw + 7; x < hw - 3; x += 7) line(c, x, ty + 2, x, tb - 2);
+            c.strokeStyle = steel; c.lineWidth = 2.5;                                                   // hoops
+            for (k = 1; k <= 3; k++) { y = ty + h * k / 4; line(c, -hw - 1, y, hw + 1, y); }
+            c.strokeStyle = faint; c.lineWidth = 0.8;
+            for (k = 1; k <= 3; k++) { y = ty + h * k / 4 - 1; line(c, -hw - 1, y, hw + 1, y); }
+            var capH = Math.round(w * 0.26);                                                            // conical cap and finial
+            c.fillStyle = "#171130"; c.strokeStyle = lineCol; c.lineWidth = 1.5;
+            c.beginPath(); c.moveTo(-hw - 4, ty); c.lineTo(0, ty - capH); c.lineTo(hw + 4, ty); c.closePath(); c.fill(); c.stroke();
+            c.fillStyle = steel; c.fillRect(-3, ty - capH - 6, 6, 6);
+            c.strokeStyle = faint; c.lineWidth = 1;                                                     // ladder
+            line(c, hw - 14, tb - 2, hw - 14, ty - 2); line(c, hw - 7, tb - 2, hw - 7, ty - 2);
+            for (y = tb - 8; y > ty; y -= 6) line(c, hw - 14, y, hw - 7, y);
+        }
+    };
+
+    function lobe(c, cx, cy, r) {
+        for (var k = 0; k < 8; k++) {
+            var a = (k + 0.5) / 8 * Math.PI * 2, x = cx + Math.cos(a) * r, y = cy + Math.sin(a) * r;
+            if (k) c.lineTo(x, y); else c.moveTo(x, y);
+        }
+        c.closePath();
+    }
+
+    var STREET_DRAW = {
+        bench: function (c) {
+            var acc = "#00DFFF", sl;
+            c.fillStyle = "#15131f"; c.strokeStyle = "rgba(0,223,255,0.55)"; c.lineWidth = 1;
+            [-22, 22].forEach(function (lx) {
+                c.beginPath(); c.moveTo(lx - 5, 0); c.lineTo(lx - 2, -15); c.lineTo(lx + 2, -15); c.lineTo(lx + 5, 0); c.closePath();
+                c.fill(); c.stroke();
+            });
+            c.fillStyle = "#0e0c16"; c.fillRect(-30, -18, 60, 4);
+            c.fillStyle = "#2a2540";
+            for (sl = 0; sl < 4; sl++) c.fillRect(-29 + sl * 14.75, -20, 13.5, 2.5);
+            c.strokeStyle = acc; c.lineWidth = 1.2; c.shadowBlur = 3 * K * DPR; c.shadowColor = acc;
+            line(c, -30, -14.5, 30, -14.5);
+            c.shadowBlur = 0;
+            c.fillStyle = "#15131f"; c.fillRect(-26, -38, 3, 20); c.fillRect(23, -38, 3, 20);
+            c.fillStyle = "#2a2540"; c.fillRect(-28, -37, 56, 4); c.fillRect(-28, -30, 56, 4);
+            c.strokeStyle = "rgba(0,223,255,0.35)"; c.lineWidth = 1;
+            c.strokeRect(-27.5, -36.5, 55, 3); c.strokeRect(-27.5, -29.5, 55, 3);
+            c.fillStyle = "#0e0c16"; c.strokeStyle = "rgba(0,223,255,0.5)";
+            c.fillRect(-33, -26, 6, 3); c.strokeRect(-32.5, -25.5, 5, 2);
+            c.fillRect(27, -26, 6, 3); c.strokeRect(27.5, -25.5, 5, 2);
+        },
+        bin: function (c) {
+            var acc = "#39FF14";
+            c.fillStyle = "#2a2540"; c.fillRect(-13, -3, 26, 3);
+            c.fillStyle = "rgba(57,255,20,0.35)"; c.fillRect(-13, -3, 26, 1);
+            c.fillStyle = "#14101f"; c.strokeStyle = acc; c.lineWidth = 1.3; c.shadowBlur = 3 * K * DPR; c.shadowColor = acc;
+            c.beginPath(); c.moveTo(-11, -3); c.lineTo(-11, -27); c.lineTo(11, -27); c.lineTo(11, -3); c.closePath();
+            c.fill(); c.stroke();
+            c.shadowBlur = 0;
+            c.fillStyle = "#1c1730";
+            c.beginPath(); c.moveTo(-13, -27); c.lineTo(-11, -33); c.lineTo(11, -33); c.lineTo(13, -27); c.closePath(); c.fill();
+            c.strokeStyle = "rgba(57,255,20,0.7)"; c.lineWidth = 1; c.stroke();
+            c.fillStyle = "#050308"; c.fillRect(-7, -30, 14, 2);
+            c.fillStyle = "rgba(57,255,20,0.35)"; c.fillRect(-11, -23, 22, 1.5);
+            ["#39FF14", "#00DFFF", "#FFB300"].forEach(function (col, k) {
+                var cx = -7 + k * 7;
+                c.fillStyle = "#050308"; c.fillRect(cx - 2.5, -19, 5, 8);
+                c.fillStyle = col; c.globalAlpha = 0.75; c.fillRect(cx - 2.5, -19, 5, 1.5); c.globalAlpha = 1;
+            });
+            c.fillStyle = "rgba(57,255,20,0.15)"; c.fillRect(-10, -8, 20, 3);
+        },
+        vending: function (c, idx) {
+            var br = VEND_BRANDS[idx % VEND_BRANDS.length], L = -18, T = -60, W2 = 36, H2 = 60, r, k, ry, sp, ky, kx;
+            c.fillStyle = "#0b0a12"; c.strokeStyle = br.col; c.lineWidth = 1.5; c.shadowBlur = 3 * K * DPR; c.shadowColor = br.col;
+            c.fillRect(L, T, W2, H2); c.strokeRect(L, T, W2, H2);
+            c.shadowBlur = 0;
+            c.globalAlpha = 0.2; c.fillStyle = br.col; c.fillRect(L, T, W2, 9); c.globalAlpha = 1;
+            c.fillStyle = br.col; c.textAlign = "center"; c.textBaseline = "middle";
+            var fs = 5;
+            c.font = "bold 5px 'Source Code Pro', monospace";
+            while (fs > 3 && c.measureText(br.name).width > W2 - 4) { fs -= 0.5; c.font = "bold " + fs + "px 'Source Code Pro', monospace"; }
+            c.fillText(br.name, 0, T + 4.8);
+            var gx = L + 3, gT = T + 12, gw = 22, gh = 34;
+            c.fillStyle = "#04050a"; c.fillRect(gx, gT, gw, gh);
+            for (r = 0; r < 3; r++) {
+                ry = gT + 4 + r * 10;
+                c.fillStyle = br.stock[r];
+                for (k = 0; k < 4; k++) {
+                    if (r === 0) c.fillRect(gx + 2 + k * 5, ry, 3, 6);
+                    else if (r === 1) c.fillRect(gx + 2 + k * 5, ry + 2, 4, 4);
+                    else { c.beginPath(); c.arc(gx + 3.5 + k * 5, ry + 3, 1.8, 0, Math.PI * 2); c.fill(); }
+                }
+                c.strokeStyle = "rgba(200,210,230,0.35)"; c.lineWidth = 0.7;
+                c.beginPath(); for (sp = 0; sp < 10; sp++) { c.moveTo(gx + 1.5 + sp * 2, ry + 7.5); c.lineTo(gx + 2.5 + sp * 2, ry + 9); } c.stroke();
+            }
+            c.fillStyle = "rgba(255,255,255,0.08)";
+            c.beginPath(); c.moveTo(gx + 3, gT); c.lineTo(gx + 9, gT); c.lineTo(gx + 1, gT + gh); c.lineTo(gx, gT + gh); c.lineTo(gx, gT + 6); c.closePath(); c.fill();
+            c.strokeStyle = "rgba(200,210,230,0.3)"; c.lineWidth = 1; c.strokeRect(gx + 0.5, gT + 0.5, gw - 1, gh - 1);
+            var px = L + 27;
+            c.fillStyle = "#030302"; c.fillRect(px, T + 13, 7, 6);
+            c.fillStyle = br.col; c.font = "bold 4px 'Source Code Pro', monospace"; c.fillText("5B", px + 3.5, T + 16.2);
+            c.fillStyle = "rgba(255,215,0,0.55)"; c.fillRect(px + 1, T + 23, 5, 1.5);
+            c.fillStyle = "rgba(200,210,230,0.45)";
+            for (ky = 0; ky < 3; ky++) for (kx = 0; kx < 2; kx++) c.fillRect(px + 1 + kx * 3, T + 28 + ky * 3, 2, 2);
+            c.fillStyle = "#15131f"; c.fillRect(L + 3, T + 49, 22, 7);
+            c.strokeStyle = "rgba(200,210,230,0.3)"; c.strokeRect(L + 3.5, T + 49.5, 21, 6);
+            c.fillStyle = br.col; c.globalAlpha = 0.25; c.fillRect(L + 27, T + 50, 7, 1.5); c.globalAlpha = 1;
+        },
+        tree: function (c) {
+            var hw = 18, h = 16, edge = "#2BD1FC", lobes = [[0, 0, 21], [-16, 6, 13], [16, 6, 13]], cy = -62;
+            c.fillStyle = "#2a2540"; c.fillRect(-hw + 3, -2, 6, 2); c.fillRect(hw - 9, -2, 6, 2);
+            c.beginPath(); c.moveTo(-hw + 2, -2); c.lineTo(-hw, -h + 3); c.lineTo(hw, -h + 3); c.lineTo(hw - 2, -2); c.closePath();
+            c.fillStyle = "#0a2a3a"; c.strokeStyle = edge; c.lineWidth = 1.5; c.fill(); c.stroke();
+            c.fillStyle = "#061a25"; c.fillRect(-hw + 3, -h + 8, hw * 2 - 6, 1.5);
+            c.fillStyle = "#0a2a3a"; c.fillRect(-hw - 2, -h, hw * 2 + 4, 3.5);
+            c.strokeStyle = edge; c.lineWidth = 1.2; c.strokeRect(-hw - 1.5, -h + 0.5, hw * 2 + 3, 3);
+            c.fillStyle = "#04080c"; c.fillRect(-hw + 1, -h - 1.5, hw * 2 - 2, 1.5);
+            var limbs = function () {
+                c.beginPath();
+                c.moveTo(0, -16); c.lineTo(0, -46);
+                c.moveTo(0, -32); c.lineTo(-13, -52);
+                c.moveTo(0, -37); c.lineTo(11, -56);
+            };
+            c.strokeStyle = "#3a3050"; c.lineWidth = 4.5; limbs(); c.stroke();
+            c.strokeStyle = "#6a5a8a"; c.lineWidth = 1; limbs(); c.stroke();
+            // the canopy: outlined on its outer edge only, then flat facets of light and shade inside
+            var path = function () { c.beginPath(); lobes.forEach(function (l) { lobe(c, l[0], cy + l[1], l[2]); }); };
+            c.strokeStyle = "#00DFFF"; c.lineWidth = 3; c.lineJoin = "round";
+            path(); c.stroke();
+            c.fillStyle = "#2CC30F"; path(); c.fill();
+            c.save(); path(); c.clip();
+            lobes.forEach(function (l) {
+                var lx = l[0], ly = cy + l[1], r = l[2];
+                c.fillStyle = "#1E9A0A";
+                c.beginPath(); c.moveTo(lx - r, ly + r * 0.25); c.lineTo(lx + r, ly + r * 0.25); c.lineTo(lx + r, ly + r + 2); c.lineTo(lx - r, ly + r + 2); c.closePath(); c.fill();
+                c.fillStyle = "#5BE83C";
+                c.beginPath(); c.moveTo(lx - r * 0.75, ly - r * 0.2); c.lineTo(lx - r * 0.2, ly - r * 0.8); c.lineTo(lx + r * 0.25, ly - r * 0.6); c.lineTo(lx - r * 0.35, ly - r * 0.05); c.closePath(); c.fill();
+            });
+            c.restore();
+        },
+        cabinet: function (c) { drawCabinet(c, 2, CABINET_STREET); }
+    };
 
     function drawEntrance(c, type, cx, hex) {
         var dTop = -64, hw = 30;
@@ -557,7 +1000,7 @@
 
     function update(t, dt) {
         // Follows the pointer while there is one; otherwise it wanders.
-        if (t - lastPointer > 4 && t > op.wanderAt) {
+        if (!pointerIn && t - lastPointer > 4 && t > op.wanderAt) {
             op.target = 40 + Math.random() * (W - 80);
             op.wanderAt = t + 3 + Math.random() * 4;
         }
@@ -581,6 +1024,7 @@
         if (shown !== lastHud && hudEl && heatFill) {
             lastHud = shown;
             heatFill.style.width = Math.round(heat) + "%";
+            if (player) player.setTension(0.2 + heat / 100 * 0.6);
             hudEl.classList.toggle("seen", seen);
         }
     }
@@ -597,6 +1041,31 @@
         drawScan(t);
         if (dt > 0) drawRain(dt);
         return cone;
+    }
+
+    // ─── The tune ──────────────────────────────────────────────────────────
+    // js/streetmusic.js plays it: a piece written for this page, composed as it goes. It starts only
+    // when the button is pressed (browsers allow nothing sooner), and its tension follows the heat.
+    var soundBtn = document.getElementById("sound");
+    var player = (window.StreetMusic && (window.AudioContext || window.webkitAudioContext))
+        ? window.StreetMusic.create({ volume: 0.6 }) : null;
+
+    // A short blip for the things that answer a click, while the sound is on.
+    function sfx(freq, slideTo, dur, type) { if (player) player.blip(freq, slideTo, dur, type); }
+
+    if (soundBtn) {
+        if (!player) soundBtn.hidden = true;
+        soundBtn.addEventListener("click", function () {
+            if (!player) return;
+            var on = player.toggle();
+            soundBtn.setAttribute("aria-pressed", on ? "true" : "false");
+            soundBtn.textContent = on ? "Sound: on" : "Sound: off";
+        });
+        // nothing plays to a tab nobody is looking at
+        document.addEventListener("visibilitychange", function () {
+            if (!player) return;
+            if (document.hidden) player.pause(); else player.resume();
+        });
     }
 
     // ─── Things that answer a click ────────────────────────────────────────
@@ -630,23 +1099,25 @@
         tags.push({ x: tx, y: ty, text: text, col: OP_COLOURS[op.colour], rot: (r() - 0.5) * 0.16, t0: t,
             drips: [{ at: 0.15 + r() * 0.2, len: 6 + r() * 12 }, { at: 0.55 + r() * 0.3, len: 4 + r() * 9 }] });
         if (tags.length > TAG_MAX) tags.shift();
+        sfx(1800, 900, 0.22, "sawtooth");
         if (seen) heat = clamp(heat + HEAT.tag, 0, 100);
     }
 
     function onClick(e) {
         var r = canvas.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top, t = now(), i, l;
         var pad = Math.max(16, 16 * K);
-        if (near(x, y, op.x, S.gy - OP.h * K / 2, Math.max(pad, OP.h * K / 2 + 4))) { setOperatorColour(op.colour + 1); return; }
-        if (near(x, y, drone.x, drone.y, pad)) { scan = { t0: t, x: op.x, y: S.gy - OP.h * K / 2 }; return; }
+        if (near(x, y, op.x, S.gy - OP.h * K / 2, Math.max(pad, OP.h * K / 2 + 4))) { setOperatorColour(op.colour + 1); sfx(660, 990, 0.09); return; }
+        if (near(x, y, drone.x, drone.y, pad + 4)) { scan = { t0: t, x: op.x, y: S.gy - OP.h * K / 2 }; sfx(420, 1680, 0.5, "sine"); return; }
         if (S.cam && near(x, y, S.cam.x, S.cam.y + 4 * K, pad)) {
-            if (camIsDown(t)) camDownUntil = 0;
-            else { camDownUntil = t + CAM.downFor; if (seen) heat = clamp(heat + HEAT.cam, 0, 100); }
+            if (camIsDown(t)) { camDownUntil = 0; sfx(330, 660, 0.12); }
+            else { camDownUntil = t + CAM.downFor; sfx(520, 70, 0.3, "sawtooth"); if (seen) heat = clamp(heat + HEAT.cam, 0, 100); }
             return;
         }
         for (i = 0; i < S.lamps.length; i++) {
             l = S.lamps[i];
             if ((Math.abs(x - l.x) <= pad && y > S.gy - LAMP.poleH * K - 8 && y < S.gy) || near(x, y, l.x + 26 * K, S.gy - LAMP.poleH * K, pad)) {
                 l.broken = !l.broken;
+                sfx(l.broken ? 240 : 480, l.broken ? 90 : 720, 0.12);
                 return;
             }
         }
@@ -661,11 +1132,15 @@
         var resizeTimer = 0;
         var onResize = function () {
             var r = canvas.getBoundingClientRect();
-            if (Math.round(r.width) === W && Math.round(r.height) === H) return;
+            if (Math.round(r.width) === W && Math.round(r.height) === H && boxesSig(copyBoxes(r)) === copySig) return;
             clearTimeout(resizeTimer);
             resizeTimer = setTimeout(function () { build(); if (REDUCE) frame(0.9, 0); }, 120);
         };
-        if (window.ResizeObserver) new ResizeObserver(onResize).observe(canvas);
+        if (window.ResizeObserver) {
+            var ro = new ResizeObserver(onResize);
+            ro.observe(canvas);
+            if (copyEl) ro.observe(copyEl);
+        }
         else window.addEventListener("resize", onResize);
         // The sign lettering needs the display face; redraw once it has loaded.
         if (document.fonts && document.fonts.load) {
@@ -675,12 +1150,16 @@
         if (REDUCE) { frame(0.9, 0); return; }
 
         var point = function (e) {
-            var r = canvas.getBoundingClientRect();
-            op.target = clamp(e.clientX - r.left, 20, W - 20);
+            var r = canvas.getBoundingClientRect(), px = clamp(e.clientX - r.left, 20, W - 20);
+            // Close to the operator it stops where it is: turning to face the pointer would swing the
+            // drone round to its other side, away from the click.
+            op.target = Math.abs(px - op.x) < OP.still * K ? op.x : px;
             lastPointer = now();
+            pointerIn = e.pointerType !== "touch";
         };
         hero.addEventListener("pointermove", point);
         hero.addEventListener("pointerdown", point);
+        hero.addEventListener("pointerleave", function () { pointerIn = false; });
         canvas.addEventListener("click", onClick);
 
         var last = 0;

@@ -92,7 +92,7 @@ a:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
   justify-content: space-between;
   align-items: center;
   gap: 16px;
-  padding: 28px var(--gutter) 0;
+  padding: 22px var(--gutter) 0;
   text-transform: uppercase;
   pointer-events: none;
 }
@@ -111,6 +111,26 @@ a:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
   white-space: nowrap;
 }
 
+.bar-right { display: flex; align-items: center; gap: 18px; }
+
+/* The one control in the bar: the tune plays only once it has been asked for. */
+.sound {
+  pointer-events: auto;
+  padding: 5px 10px;
+  background: rgba(3, 3, 9, 0.6);
+  border: 1px solid rgba(209, 213, 235, 0.3);
+  border-radius: 4px;
+  font: inherit;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.sound:hover { color: var(--text); border-color: rgba(209, 213, 235, 0.6); }
+.sound:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
+.sound[aria-pressed="true"] { color: var(--op); border-color: var(--op); }
+
 .dot {
   display: inline-block;
   width: 7px;
@@ -123,7 +143,7 @@ a:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
 .hero-copy {
   position: relative;
   z-index: 2;
-  padding: clamp(20px, 5vh, 56px) var(--gutter) 0;
+  padding: clamp(4px, 1.5vh, 16px) var(--gutter) 0;
   /* clicks fall through to the street, except on the words themselves */
   pointer-events: none;
 }
@@ -142,7 +162,10 @@ a:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
 }
 
 .boot {
-  min-height: 5.6em;
+  width: max-content;
+  max-width: 100%;
+  /* five lines: the four boot lines and the cursor's, so the block never grows as it types */
+  min-height: 7em;
   font-family: var(--mono);
   font-size: 13px;
   line-height: 1.4;
@@ -168,7 +191,7 @@ a:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
   margin-top: 10px;
   font-family: var(--display);
   font-weight: 700;
-  font-size: clamp(2.1rem, min(9.5vw, 14vh), 7rem);
+  font-size: clamp(2.1rem, min(9.5vw, 12.5vh), 7rem);
   line-height: 1.05;
   letter-spacing: 0.03em;
   color: #EAFBFF;
@@ -180,6 +203,8 @@ a:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
 }
 
 .tagline {
+  width: max-content;
+  max-width: 100%;
   margin-top: 14px;
   font-family: var(--display);
   font-size: clamp(0.8rem, 1.7vw, 1.05rem);
@@ -190,16 +215,27 @@ a:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
 
 .blurb {
   margin-top: 16px;
-  max-width: 54ch;
+  max-width: 68ch;
   color: var(--text);
 }
 
-.tagline, .blurb { transition: opacity 0.5s linear 0.45s; }
+.genre {
+  width: max-content;
+  max-width: 100%;
+  margin-top: 14px;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.tagline, .blurb, .genre { transition: opacity 0.5s linear 0.45s; }
 
 /* While the boot lines type, the title waits (js/site.js adds and removes this). */
 .hero.booting .wordmark { clip-path: inset(-0.4em 100% -0.4em -0.4em); }
 .hero.booting .tagline,
-.hero.booting .blurb { opacity: 0; }
+.hero.booting .blurb,
+.hero.booting .genre { opacity: 0; }
 
 /* The game's HEAT meter, sitting on the street. */
 .hud {
@@ -245,14 +281,14 @@ a:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
   gap: 28px;
 }
 
-.stats {
+.cards {
   list-style: none;
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 16px;
 }
 
-.stats li,
+.card,
 .panel {
   background: var(--panel-bg);
   border: 1px solid var(--border);
@@ -260,23 +296,28 @@ a:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
   padding: 22px 24px;
 }
 
-.stat-n {
-  display: block;
+.card h2 {
   font-family: var(--display);
   font-weight: 700;
-  font-size: clamp(2rem, 5vw, 3rem);
-  line-height: 1.1;
-  color: var(--cyan);
+  font-size: 17px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
 }
 
-.stat-t {
-  display: block;
-  margin-top: 8px;
-  font-size: 11px;
-  letter-spacing: 0.14em;
+.card-tag {
+  margin: 6px 0 12px;
+  font-size: 10px;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--text-dim);
 }
+
+/* Each in its own colours from the game: Keystone's red, Overwatch's grey. */
+.card-keystone { border-color: rgba(196, 18, 48, 0.55); }
+.card-keystone h2 { color: #E0203F; }
+.card-overwatch { border-color: rgba(110, 110, 110, 0.7); }
+.card-overwatch h2 { color: var(--text); }
+.card-nullgrid h2 { color: var(--cyan); }
 
 .panel h2 {
   font-family: var(--display);
@@ -315,15 +356,20 @@ a:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
 }
 
 @media (max-width: 640px) {
-  .stats { grid-template-columns: 1fr; }
+  .cards { grid-template-columns: 1fr; }
+  .status { display: none; }
   .bar { padding-top: 22px; }
   .brand { font-size: 12px; letter-spacing: 0.16em; }
   .status { letter-spacing: 0.1em; }
   .hud-place { display: none; }
 }
 
+@media (max-width: 900px) and (min-width: 641px) {
+  .cards { grid-template-columns: 1fr; }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .wordmark, .tagline, .blurb { transition: none; }
+  .wordmark, .tagline, .blurb, .genre { transition: none; }
   .boot .cursor { animation: none; }
   .hud { display: none; }
 }

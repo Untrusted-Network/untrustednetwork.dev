@@ -4,12 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Untrusted Network — [MODE-ZERO]</title>
-  <meta name="description" content="Untrusted Network is the studio behind [MODE-ZERO], a side-on cyberpunk platformer in a city that watches. In development for PC.">
+  <meta name="description" content="Untrusted Network is the studio behind [MODE-ZERO], a side-on cyberpunk platformer set in Nullgrid, a city Keystone built and Overwatch watches. In development for PC.">
   <meta name="theme-color" content="#030309">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://untrustednetwork.dev/">
   <meta property="og:title" content="Untrusted Network — [MODE-ZERO]">
-  <meta property="og:description" content="A side-on cyberpunk platformer in a city that watches. Outrun it, hide from it or switch it off.">
+  <meta property="og:description" content="A side-on cyberpunk platformer set in Nullgrid, a city Keystone built and Overwatch watches.">
   <link rel="canonical" href="https://untrustednetwork.dev/">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -25,14 +25,18 @@
 
       <header class="bar">
         <p class="brand">Untrusted Network</p>
-        <p class="status"><span class="dot" aria-hidden="true"></span>In development</p>
+        <div class="bar-right">
+          <p class="status"><span class="dot" aria-hidden="true"></span>In development</p>
+          <button class="sound" id="sound" type="button" aria-pressed="false">Sound: off</button>
+        </div>
       </header>
 
       <div class="hero-copy">
         <pre class="boot" id="boot" aria-hidden="true"></pre>
         <h1 class="wordmark">[MODE-ZERO]</h1>
         <p class="tagline">Move. Evade. Hack.</p>
-        <p class="blurb">A side-on cyberpunk platformer in a city that watches. Outrun it, hide from it or switch it off.</p>
+        <p class="blurb">You gave Keystone ten years and left with a datapad and a service award. Now you work Nullgrid alone, with Overwatch's red eye on every street.</p>
+        <p class="genre">A side-on cyberpunk platformer for PC</p>
       </div>
 
       <div class="hud" id="hud" aria-hidden="true">
@@ -44,10 +48,22 @@
     </section>
 
     <section class="below">
-      <ul class="stats">
-        <li><span class="stat-n">19</span><span class="stat-t">Districts in one continuous city</span></li>
-        <li><span class="stat-n">30+</span><span class="stat-t">Arcade games inside the game</span></li>
-        <li><span class="stat-n">10+</span><span class="stat-t">Operators, each with a skill</span></li>
+      <ul class="cards">
+        <li class="card card-keystone">
+          <h2>Keystone</h2>
+          <p class="card-tag">Conglomerate // Connecting Worlds</p>
+          <p>Keystone makes the pad in your hand, the system it boots on and the interface in your head. All of it stays connected. You accepted the terms.</p>
+        </li>
+        <li class="card card-overwatch">
+          <h2>Overwatch</h2>
+          <p class="card-tag">Security faction</p>
+          <p>Overwatch runs every camera in Nullgrid, and its red eye is on every street. It records where you go, who you meet and what you carry. The people it takes are driven to Sector 0, and their names leave the public record.</p>
+        </li>
+        <li class="card card-nullgrid">
+          <h2>Nullgrid</h2>
+          <p class="card-tag">The city</p>
+          <p>A single unbroken city. Red Sector burns with neon, cranes swing over the Data Docks, and the towers of Corporate Spire stand in glass and gold, Keystone's the tallest of all.</p>
+        </li>
       </ul>
 
       <div class="panel">
@@ -65,6 +81,7 @@
     <p class="foot-end" id="hangUp">NO CARRIER</p>
   </footer>
 
+  <script src="js/streetmusic.js"></script>
   <script src="js/site.js"></script>
 </body>
 </html>
