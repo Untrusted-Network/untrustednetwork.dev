@@ -115,7 +115,7 @@
             reverbIn = conv;
 
             // rain, and the low hum of the street
-            [["bandpass", 2600, 0.4, 0.012], ["lowpass", 200, 0, 0.02]].forEach(function (b) {
+            [["bandpass", 2600, 0.4, 0.006], ["lowpass", 200, 0, 0.02]].forEach(function (b) {
                 var src = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
                 src.buffer = noiseBuf(7); src.loop = true;
                 f.type = b[0]; f.frequency.value = b[1];
