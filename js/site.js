@@ -270,7 +270,7 @@
         if (!REDUCE) for (i = 0; i < maxCars() / 2; i++) spawnCar(true);
 
         rain.length = 0;
-        var n = Math.round(W / 16);
+        var n = Math.round(W / 21);
         for (i = 0; i < n; i++) {
             rain.push({ x: Math.random() * (W + 120), y: Math.random() * H, len: (10 + Math.random() * 14) * K, spd: (300 + Math.random() * 180) * K });
         }
@@ -1370,7 +1370,7 @@
 
     function drawRain(dt) {
         ctx.save();
-        ctx.strokeStyle = "rgba(57,255,20,0.26)";
+        ctx.strokeStyle = "rgba(57,255,20,0.19)";
         ctx.lineWidth = 1;
         ctx.beginPath();
         for (var i = 0; i < rain.length; i++) {
