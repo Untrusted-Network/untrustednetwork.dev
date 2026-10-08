@@ -115,6 +115,7 @@
     var CABINET_STREET = { body: "#0f2418", face: "#143222", edge: "#2FBF71", dim: "rgba(47,191,113,0.45)" };
     var CABINET_ROOF = { body: "#171b20", face: "#20252c", edge: "#8A96A3", dim: "rgba(138,150,163,0.45)" };
     var GAPS = [260, 300, 240, 320, 280, 300];
+    var ARCADE = 1;         // the Pixel Arcade's place in the list: the street is laid out around it
     var FACADE = { winW: 18, winH: 26, gapX: 36, gapY: 46, pad: 36, padMin: 14, storeH: 114, bayW: 60, corner: 10, edge: 4, edgeAlpha: 0.42, signY: 134, plateH: 20 };
     // The game's three skyline layers (preRenderSkyline), far to near: where the towers stand, their
     // size, their colour, what crowns them, and the grid their windows sit on. The windows take the
@@ -202,21 +203,27 @@
         S = { gy: gy, near: [], lamps: [], props: [], cam: null, roomOver: roomOver };
         var x, w, h;
 
-        // On a wide screen the street is slid along so the second building, the arcade, starts just
-        // past the end of the words, where it can stand at its full height. If that leaves bare
-        // street at the left edge, one more building goes in before the first.
-        //
-        // On a narrow screen (a phone held upright) the buildings are narrower and the street is set
-        // so the first gap, with its lamp and furniture, sits in view and the arcade's wall and its
-        // billboards close the right-hand edge.
-        var count = BUILDINGS.length, copyRight = 0, copyBottom = 0, i = 0, def, gap, room, slot, space;
+        // The street is laid out around the Pixel Arcade, which is always wholly in view with the
+        // camera on its wall, whatever the screen:
+        //   - on a wide screen it starts just past the end of the words, where it can stand at its
+        //     full height, or as near to that as keeps its far wall on screen
+        //   - on a narrow one (a phone held upright) the buildings are narrower and it stands at the
+        //     left, with just enough room beside it for its billboards
+        //   - otherwise it stands in the middle
+        // The rest of the street is then built outwards from it in both directions.
+        var count = BUILDINGS.length, copyRight = 0, copyBottom = 0, i, def, gap, room, slot, space;
         var narrow = W < 720;
-        var widthOf = function (d) { return (narrow ? Math.min(d.w, 400) : d.w) * K; };
+        var widthOf = function (d) { return (narrow ? Math.min(d.w, 340) : d.w) * K; };
         boxes.forEach(function (q) { copyRight = Math.max(copyRight, q.r); copyBottom = Math.max(copyBottom, q.b); });
-        x = -200 * K;
-        if (narrow) x = W - 34 * K - (widthOf(BUILDINGS[0]) + GAPS[0] * K);
-        else if (W - copyRight > 300 * K) x = Math.max(x, copyRight + 24 - (BUILDINGS[0].w + GAPS[0]) * K);
-        if (x > -40 * K) { i = -1; x -= widthOf(BUILDINGS[count - 1]) + GAPS[count - 1] * K; }
+        var arcW = widthOf(BUILDINGS[ARCADE]), edge = (POSTER.off + POSTER.w) * K + 8, farWall = W - 12 - arcW;
+        var left = narrow ? edge : (W - copyRight > 300 * K ? copyRight + 24 : (W - arcW) / 2);
+        left = Math.max(Math.min(left, farWall), Math.min(edge, Math.max(0, farWall)));
+        i = ARCADE; x = left;
+        while (x > -40 * K) {
+            i--;
+            slot = ((i % count) + count) % count;
+            x -= widthOf(BUILDINGS[slot]) + GAPS[slot] * K;
+        }
         while (x < W + 40) {
             slot = ((i % count) + count) % count;
             def = BUILDINGS[slot];
@@ -235,16 +242,12 @@
             i++;
         }
 
-        // The camera hangs on whichever building shows most of itself.
-        var best = null, bestVis = 0;
+        // The camera hangs on the arcade's wall, clear of its door and its sign.
         S.near.forEach(function (b) {
-            var vis = Math.min(b.x + b.w, W) - Math.max(b.x, 0);
-            if (vis > bestVis) { bestVis = vis; best = b; }
+            if (b.idx !== ARCADE) return;
+            var lo = Math.max(b.x, 0) + 40 * K, hi = Math.min(b.x + b.w, W) - 40 * K;
+            S.cam = { x: clamp(b.x + b.w * 0.8, lo, Math.max(lo, hi)), y: gy - Math.min(CAM.height * K, b.h - 30 * K) };
         });
-        if (best) {
-            var lo = Math.max(best.x, 0) + 70 * K, hi = Math.min(best.x + best.w, W) - 70 * K;
-            S.cam = { x: clamp(best.x + best.w * 0.8, lo, Math.max(lo, hi)), y: gy - Math.min(CAM.height * K, best.h - 30 * K) };
-        }
 
         // where the traffic flies and the patrol drone passes: under the words, over the street
         S.laneBot = gy - 90 * K;
