@@ -329,6 +329,9 @@ a:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
 .card-overwatch h2 { color: var(--text); }
 .card-nullgrid h2 { color: var(--cyan); }
 
+/* the contact panel takes the operator's colour, like its heading, so it is not a second cyan box */
+.panel { border-color: rgba(var(--op-rgb), 0.45); }
+
 .panel h2 {
   font-family: var(--display);
   font-size: 12px;
