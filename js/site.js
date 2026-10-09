@@ -80,17 +80,18 @@
     function boxesSig(boxes) { return boxes.map(function (q) { return q.l + "," + q.r + "," + q.b; }).join(";"); }
 
     var BUILDINGS = [
-        { name: "MARKET ROW",   hex: "#00DFFF", w: 620, h: 450, ent: 0, roof: [[0.2, "junction"], [0.5, "beacon"], [0.8, "junction"]] },
+        { name: "MARKET ROW",   hex: "#00DFFF", w: 620, h: 450, ent: 0, roof: [[0.2, "condenser"], [0.5, "hut"], [0.8, "skylight"]] },
         { name: "PIXEL ARCADE", hex: "#FF1493", w: 560, h: 560, ent: 3, tall: true, roof: [[0.2, "dishbox"], [0.5, "tank"], [0.82, "beacon"]],
           posters: [{ side: -1, yf: 0.28, art: "overdrive", title: "OVERDRIVE", col: "#FF1493" }, { side: -1, yf: 0.6, art: "shatter", title: "SHATTER", col: "#FF8C00" }] },
-        { name: "SUBGRID HUB",  hex: "#8A2BE2", w: 600, h: 400, ent: 1, roof: [[0.2, "tank"], [0.5, "junction"], [0.82, "ventbox"]] },
+        { name: "SUBGRID HUB",  hex: "#8A2BE2", w: 600, h: 400, ent: 1, roof: [[0.2, "hut"], [0.5, "array"], [0.82, "ventbox"]] },
         { name: "CHIP CLINIC",  hex: "#39FF14", w: 640, h: 440, ent: 0, roof: [[0.2, "beacon"], [0.5, "dishbox"], [0.82, "junction"]] },
-        { name: "GRID TOWER",   hex: "#00DFFF", w: 520, h: 460, ent: 3, roof: [[0.2, "ventbox"], [0.5, "junction"], [0.82, "tank"]] },
-        { name: "CIPHER STACK", hex: "#FF1493", w: 600, h: 410, ent: 1, roof: [[0.2, "junction"], [0.5, "ventbox"], [0.82, "dishbox"]] }
+        { name: "GRID TOWER",   hex: "#00DFFF", w: 520, h: 460, ent: 3, roof: [[0.2, "ventbox"], [0.5, "skylight"], [0.82, "tank"]] },
+        { name: "CIPHER STACK", hex: "#FF1493", w: 600, h: 410, ent: 1, roof: [[0.2, "array"], [0.5, "hut"], [0.82, "dishbox"]] }
     ];
-    // The game's five roof gadgets and how far each rises above the deck, in its pixels. One that
-    // would reach the words above it gives way to a plant cabinet, the only low one, or is left off.
-    var ROOF_H = { junction: 52, beacon: 100, ventbox: 110, tank: 140, dishbox: 144 };
+    // The game's roof gear and how far each piece rises above the deck, in its pixels. One that would
+    // reach the words above it gives way to one of the low pieces, or is left off.
+    var ROOF_H = { condenser: 38, junction: 52, array: 60, skylight: 70, hut: 90, ventbox: 94, beacon: 134, tank: 140, dishbox: 144 };
+    var ROOF_LOW = ["condenser", "skylight", "array", "junction"];
     // the room kept above a roof, where the screen has it: enough for the tallest gadget planned for it
     function roofSpace(def) {
         return def.roof.reduce(function (m, g) { return Math.max(m, ROOF_H[g[1]]); }, 0) + 8;
@@ -232,11 +233,12 @@
             slot = ((i % count) + count) % count;
             def = BUILDINGS[slot];
             w = widthOf(def);
-            // Room above the roof is kept for its gadgets where there is plenty; where there is little,
-            // the wall takes all of it, since rows of windows matter more than a cabinet.
+            // Room above the roof is kept for its gear where there is plenty; with less, only enough for
+            // the low pieces; where there is little, the wall takes all of it, since rows of windows
+            // matter more than a condenser.
             room = roomOver(x, x + w);
-            space = roofSpace(def) * K;
-            h = room - space >= 200 * K ? Math.min(def.h * K, room - space) : Math.max(150 * K, Math.min(def.h * K, room - 8));
+            space = [roofSpace(def), ROOF_H.skylight + 8, ROOF_H.condenser + 8].filter(function (sp) { return room - sp * K >= 200 * K; })[0];
+            h = space ? Math.min(def.h * K, room - space * K) : Math.max(150 * K, Math.min(def.h * K, room - 8));
             S.near.push({ x: x, w: w, h: h, def: def, idx: i, room: room });
             gap = GAPS[slot] * K;
             STREET[slot].forEach(function (it) { S.props.push({ x: x + w + it[0] * K, kind: it[1], idx: slot, shakeUntil: 0, used: false }); });
@@ -436,11 +438,15 @@
         c.fillRect(0, top - 4, w, 4);
         var spare = (b.room - b.h) / K - 6;
         b.def.roof.forEach(function (g, gi) {
-            var kind = g[1];
-            if (ROOF_H[kind] > spare) kind = "junction";
-            if (ROOF_H[kind] > spare) return;
+            var kind = g[1], low;
+            if (ROOF_H[kind] > spare) {
+                low = ROOF_LOW.filter(function (k) { return ROOF_H[k] <= spare; });
+                if (!low.length) return;
+                kind = low[Math.abs(b.idx + gi) % low.length];
+            }
             c.save();
-            c.translate(w * g[0], top - 4);
+            // masts and tanks rise from the parapet's top; a box stands on the deck, 2px below it
+            c.translate(w * g[0], top - 4 + (kind === "tank" || kind === "beacon" ? 0 : 2));
             ROOF_DRAW[kind](c, hex, Math.abs(b.idx * 7 + gi));
             c.restore();
         });
@@ -605,11 +611,97 @@
         c.fillStyle = "#FFD24A"; c.fillRect(x0 + w - 9, top + 12, 4, 4);                           // a hazard sticker
     }
 
-    // The game's roof gadgets (_cityRoofGadget, _cityDishStand, _cityDishHead, drawCityWaterTower).
     function strokePath(c, pts) {
         c.beginPath();
         for (var i = 0; i < pts.length; i += 4) { c.moveTo(pts[i], pts[i + 1]); c.lineTo(pts[i + 2], pts[i + 3]); }
         c.stroke();
+    }
+
+    // The game's roof gear (city_roof_gear.js, with _cityDishHead, _cityDishStand and drawCityWaterTower):
+    // a dark steel body with one neon edge in the building's colour, parts you can name, and lights
+    // that stay on.
+    var GEAR = { steel: "#171a22", steel2: "#232733", steel3: "#2e3340", dark: "#07080c",
+        hi: "rgba(205,212,225,0.45)", seam: "rgba(205,212,225,0.16)", warm: "rgba(255,206,120,0.9)", ok: "#39FF14", warn: "#FFB000", red: "#FF3B30" };
+    function gearBody(c, pts, hex) {
+        c.beginPath(); c.moveTo(pts[0][0], pts[0][1]);
+        for (var i = 1; i < pts.length; i++) c.lineTo(pts[i][0], pts[i][1]);
+        c.closePath();
+        c.fillStyle = GEAR.steel; c.fill();
+        c.strokeStyle = rgba(hex, 0.85); c.lineWidth = 1.5; c.shadowColor = rgba(hex, 1); c.shadowBlur = 3;
+        c.stroke(); c.shadowBlur = 0;
+    }
+    function gearBox(c, x, y, w, h, hex, ch) {                  // ch: a chamfer on the two top corners
+        gearBody(c, [[x, y + h], [x, y + ch], [x + ch, y], [x + w - ch, y], [x + w, y + ch], [x + w, y + h]], hex);
+    }
+    function gearFoot(c, x, w) { c.fillStyle = "rgba(0,0,0,0.7)"; c.fillRect(x - 3, -2, w + 6, 3); }      // where a box meets the deck
+    function gearSteel(c, x, y, w, h) { c.fillStyle = GEAR.steel2; c.fillRect(x, y, w, h); c.fillStyle = GEAR.hi; c.fillRect(x, y, w, 1); }
+    function gearSlats(c, x, y, w, h, step) {                   // a louvre
+        c.fillStyle = GEAR.dark; c.fillRect(x, y, w, h);
+        c.fillStyle = GEAR.steel3;
+        for (var sy = y + 2; sy < y + h - 2; sy += step) c.fillRect(x + 1, sy, w - 2, 2);
+        c.strokeStyle = GEAR.seam; c.lineWidth = 1; c.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+    }
+    function gearBars(c, x, y, w, h, step) {                    // a fan guard, bars upright
+        c.fillStyle = GEAR.dark; c.fillRect(x, y, w, h);
+        c.fillStyle = GEAR.steel3;
+        for (var sx = x + 2; sx < x + w - 2; sx += step) c.fillRect(sx, y, 2, h);
+    }
+    function gearLamp(c, x, y, col, s) {                        // a steady light
+        c.fillStyle = col; c.shadowColor = col; c.shadowBlur = 4; c.fillRect(x, y, s || 3, s || 3); c.shadowBlur = 0;
+    }
+    // one bay of braced truss between two legs (the game's drawCityTrussBetween)
+    function gearTruss(c, ax0, ay0, ax1, ay1, bx0, by0, bx1, by1, steel, hi) {
+        var gs = 3.8;
+        c.save();
+        c.lineCap = "round";
+        c.strokeStyle = "rgba(140,160,180,0.5)"; c.lineWidth = 1.1;
+        strokePath(c, [ax0, ay0, bx1, by1, bx0, by0, ax1, ay1]);
+        c.strokeStyle = steel; c.lineWidth = 2;
+        strokePath(c, [ax0, ay0, bx0, by0, ax1, ay1, bx1, by1]);
+        c.lineWidth = 3.5;
+        strokePath(c, [ax0, ay0, ax1, ay1, bx0, by0, bx1, by1]);
+        c.strokeStyle = hi; c.lineWidth = 1;
+        strokePath(c, [ax0, ay0, ax1, ay1, bx0, by0, bx1, by1]);
+        [[ax0, ay0], [ax1, ay1], [bx0, by0], [bx1, by1]].forEach(function (p) {
+            c.fillStyle = steel; c.fillRect(p[0] - gs, p[1] - gs, gs * 2, gs * 2);
+            c.fillStyle = hi; c.fillRect(p[0] - 0.75, p[1] - 0.75, 1.5, 1.5);
+        });
+        c.restore();
+    }
+    // the yoke a dish turns on: a flanged foot, a short column and a fork that holds the dish's hub
+    function dishStand(c, botY, topY) {
+        var h = botY - topY, fork = Math.min(10, Math.max(5, Math.round(h * 0.35)));
+        c.fillStyle = GEAR.steel2; c.fillRect(-11, botY - 3, 22, 3);
+        c.fillStyle = GEAR.hi; c.fillRect(-11, botY - 3, 22, 1);
+        c.fillStyle = GEAR.steel2; c.fillRect(-4, topY + fork, 8, h - fork - 3);
+        c.fillStyle = "rgba(205,212,225,0.3)"; c.fillRect(-4, topY + fork, 1, h - fork - 3);
+        c.fillStyle = GEAR.steel3; c.fillRect(-9, topY + fork - 2, 18, 4);
+        c.fillRect(-9, topY - 2, 3, fork + 2); c.fillRect(6, topY - 2, 3, fork + 2);
+        c.fillStyle = "rgba(205,212,225,0.6)"; c.fillRect(-8, topY - 1, 1, 1); c.fillRect(7, topY - 1, 1, 1);
+    }
+    // the dish: a steel bowl aimed a little off straight up, lit on its rim and at its feed
+    function dishHead(c, cy, hex, seed) {
+        var R = 36, ang = [-0.55, -0.38, -0.22, 0.22, 0.38, 0.55, 0][seed % 7], a0 = Math.PI * 0.20, a1 = Math.PI * 0.80;
+        var lit = rgba(hex, 0.9), ax = R * Math.cos(a0), ay = -R + R * Math.sin(a0), bx = R * Math.cos(a1);
+        c.save();
+        c.translate(0, cy);
+        c.rotate(ang);
+        c.fillStyle = GEAR.steel;
+        c.beginPath(); c.arc(0, -R, R, a0, a1); c.closePath(); c.fill();
+        c.strokeStyle = GEAR.hi; c.lineWidth = 2;
+        c.beginPath(); c.arc(0, -R, R, a0, a1); c.stroke();
+        c.strokeStyle = rgba(hex, 0.5); c.lineWidth = 1;
+        c.beginPath(); c.arc(0, -R, R * 0.6, a0, a1); c.stroke();
+        c.strokeStyle = lit; c.lineWidth = 1.5; c.shadowBlur = 3; c.shadowColor = lit;
+        line(c, ax, ay, bx, ay);
+        c.shadowBlur = 0;
+        c.strokeStyle = GEAR.steel3; c.lineWidth = 2;
+        line(c, 0, -2, 0, -24);
+        c.fillStyle = GEAR.steel3; c.fillRect(-3, -28, 6, 5);
+        c.fillStyle = lit; c.shadowBlur = 4; c.shadowColor = lit; c.fillRect(-1.5, -31, 3, 3); c.shadowBlur = 0;
+        c.fillStyle = GEAR.steel2; c.fillRect(-5, -4, 10, 7);
+        c.fillStyle = GEAR.hi; c.fillRect(-5, -4, 10, 1);
+        c.restore();
     }
 
     var ROOF_DRAW = {
@@ -619,105 +711,183 @@
                 { body: boxFillOf(hex), face: boxFillOf(hex), edge: rgba(hex, 0.5), dim: rgba(hex, 0.18) }];
             c.fillStyle = "rgba(0,0,0,0.7)";
             var doors = [2, 1, 3][seed % 3], w = [0, 32, 58, 84][doors];
-            c.fillRect(-w / 2 - 4, 0, w + 8, 3);
-            c.translate(0, 2);
+            c.fillRect(-w / 2 - 4, -2, w + 8, 3);
             drawCabinet(c, doors, pals[(seed * 7 + 3) % pals.length]);
         },
+        // the comms mast: a bolted foot, a tubular mast with a strip of the building's light up it, guyed
+        // to the deck, carrying one of three sets of aerials, and a steady red light at its top
         beacon: function (c, hex, seed) {
-            var soft = rgba(hex, 0.5), k;
-            c.strokeStyle = soft; c.lineWidth = 2.5;
-            line(c, 0, 0, 0, -76);
-            c.lineWidth = 1;
-            for (k = 0; k < 3; k++) line(c, -6 + k * 6, 0, -6 + k * 6, -22 - k * 6);
-            [-20, 22].forEach(function (po, pk) {                                                       // neighbour poles
-                var ph = 40 + ((seed * 5 + pk * 13) % 26);
-                c.strokeStyle = soft; c.lineWidth = 1.5;
-                line(c, po, 0, po, -ph);
-                if (pk === 0) { c.fillStyle = "rgba(0,223,255,0.7)"; c.fillRect(po - 2, -ph * 0.6, 4, 4); }
-            });
-            c.globalAlpha = 0.3; c.fillStyle = "#FF3300";
-            c.beginPath(); c.arc(0, -83, 16, 0, Math.PI * 2); c.fill();
-            c.globalAlpha = 1; c.fillStyle = "#FF5533";
-            c.beginPath(); c.arc(0, -83, 7, 0, Math.PI * 2); c.fill();
+            var top = -92, v = seed % 3, col = rgba(hex, 0.9), lampY = top - 5;
+            c.strokeStyle = GEAR.seam; c.lineWidth = 1;
+            strokePath(c, [0, -58, -20, 0, 0, -58, 20, 0]);
+            gearSteel(c, -13, -4, 26, 4);
+            c.fillStyle = GEAR.hi; c.fillRect(-10, -3, 2, 2); c.fillRect(8, -3, 2, 2);
+            gearSteel(c, -5, -12, 10, 8);
+            c.fillStyle = GEAR.steel3;                                                                  // brackets, behind the mast
+            if (v === 0) { c.fillRect(-8, top + 14, 16, 2); c.fillRect(-8, top + 28, 16, 2); c.fillRect(-8, top + 20, 16, 2); c.fillRect(-8, top + 34, 16, 2); }
+            else if (v === 1) { c.fillRect(0, top + 22, 8, 2); c.fillRect(-8, top + 48, 8, 2); }
+            else { c.fillRect(-15, top + 6, 30, 3); }
+            c.fillStyle = GEAR.steel2; c.fillRect(-3, top, 6, 80);                                      // the mast
+            c.fillStyle = GEAR.hi; c.fillRect(-3, top, 1, 80);
+            c.fillStyle = col; c.shadowColor = col; c.shadowBlur = 3; c.fillRect(-0.5, top + 6, 1.5, 68); c.shadowBlur = 0;
+            c.fillStyle = GEAR.steel3; c.fillRect(-4, -44, 8, 3); c.fillRect(-4, top + 2, 8, 3);
+            if (v === 0) {                                                                              // sector panels either side, and a whip
+                [[-14, 8], [8, 14]].forEach(function (p) {
+                    var px = p[0], py = top + p[1];
+                    c.fillStyle = GEAR.steel; c.fillRect(px, py, 6, 30);
+                    c.strokeStyle = GEAR.hi; c.lineWidth = 1; c.strokeRect(px + 0.5, py + 0.5, 5, 29);
+                    c.fillStyle = rgba(hex, 0.6); c.fillRect(px + 2, py + 3, 2, 24);
+                });
+                c.strokeStyle = GEAR.hi; c.lineWidth = 1; line(c, 0.5, top, 0.5, top - 20);
+                lampY = top - 24;
+            } else if (v === 1) {                                                                       // two relay drums, side on
+                [[1, 12, 1], [-1, 40, 0.8]].forEach(function (d) {
+                    var dw = Math.round(12 * d[2]), dh = Math.round(22 * d[2]), x0 = d[0] > 0 ? 8 : -8 - dw, y0 = top + d[1];
+                    c.fillStyle = GEAR.steel; c.fillRect(x0, y0, dw, dh);
+                    c.strokeStyle = GEAR.hi; c.lineWidth = 1; c.strokeRect(x0 + 0.5, y0 + 0.5, dw - 1, dh - 1);
+                    c.fillStyle = rgba(hex, 0.7); c.fillRect(d[0] > 0 ? x0 + dw - 2 : x0, y0, 2, dh);
+                });
+            } else {                                                                                    // a cross-arm of whips, and a junction box
+                c.strokeStyle = GEAR.hi; c.lineWidth = 1;
+                strokePath(c, [-12.5, top + 6, -12.5, top - 20, 0.5, top + 6, 0.5, top - 28, 12.5, top + 6, 12.5, top - 12]);
+                gearSteel(c, -6, -36, 12, 14);
+                gearLamp(c, -2, -31, GEAR.ok, 2);
+                lampY = top - 32;
+            }
+            gearLamp(c, -2, lampY, GEAR.red, 4);
         },
+        // the air handler: intake louvres, an access panel with its light, and a fan bank under a guard
         ventbox: function (c, hex) {
-            var y;
-            c.fillStyle = "rgba(0,0,0,0.7)"; c.fillRect(-33, 0, 66, 3);
-            c.fillStyle = boxFillOf(hex); c.fillRect(-29, -70, 58, 72);
-            c.strokeStyle = rgba(hex, 0.5); c.lineWidth = 1.5; c.strokeRect(-29, -70, 58, 72);
-            c.strokeStyle = rgba(hex, 0.18); c.lineWidth = 1;
-            for (y = -56; y < -4; y += 15) line(c, -25, y, 25, y);
-            c.fillStyle = "#39FF14"; c.fillRect(-22, -62, 6, 6);
-            c.fillStyle = "#100c22"; c.strokeStyle = "rgba(180,180,200,0.35)"; c.lineWidth = 1.5;          // the fan bank on top
-            c.fillRect(-22, -88, 44, 18); c.strokeRect(-22, -88, 44, 18);
-            c.beginPath(); c.arc(0, -79, 7, 0, Math.PI * 2); c.stroke();
-            c.strokeStyle = rgba(hex, 0.5);
-            line(c, 17, -88, 17, -106);
+            var bw = 58, bh = 72, bx = -bw / 2, by = -bh, fx = -22, fy = by - 18;
+            gearFoot(c, bx, bw);
+            gearBox(c, bx, by, bw, bh, hex, 0);
+            c.fillStyle = GEAR.steel2; c.fillRect(bx + 1, -6, bw - 2, 5);
+            gearSlats(c, bx + 5, by + 8, 32, 54, 6);
+            c.strokeStyle = GEAR.seam; c.lineWidth = 1; c.strokeRect(bx + 41.5, by + 8.5, 12, 30);
+            c.fillStyle = GEAR.hi; c.fillRect(bx + 50, by + 21, 2, 6);
+            gearLamp(c, bx + 46, by + 44, GEAR.ok, 3);
+            c.fillStyle = GEAR.steel3; c.fillRect(bx + 42, by + 53, 11, 6);                             // rating plate
+            c.fillStyle = GEAR.steel2; c.fillRect(fx, fy, 44, 18);                                      // the fan bank
+            gearBars(c, fx + 3, fy + 5, 38, 9, 5);
+            c.fillStyle = GEAR.hi; c.fillRect(fx - 1, fy, 46, 2);
         },
+        // the dish on its shelter: a louvred door, a panel of status lights, a conduit, and the dish on a yoke
         dishbox: function (c, hex, seed) {
-            var soft = rgba(hex, 0.5), y, i, n = 3, hw = 13, botY = -72, topY = -106;
-            c.fillStyle = "rgba(0,0,0,0.7)"; c.fillRect(-33, 0, 66, 3);
-            c.fillStyle = boxFillOf(hex); c.fillRect(-29, -72, 58, 74);
-            c.strokeStyle = soft; c.lineWidth = 1.5; c.strokeRect(-29, -72, 58, 74);
-            c.strokeStyle = rgba(hex, 0.18); c.lineWidth = 1;
-            for (y = -58; y < -4; y += 16) line(c, -25, y, 25, y);
-            line(c, 0, -68, 0, -2);
-            // the stocky scaffold stand: two tapered legs, rungs and cross-braces
-            c.strokeStyle = "#3a3358"; c.lineWidth = 3;
-            strokePath(c, [-hw, botY, -hw * 0.6, topY, hw, botY, hw * 0.6, topY]);
-            c.lineWidth = 1.4;
-            for (i = 0; i <= n; i++) {
-                var f = i / n, yy = botY + (topY - botY) * f, w2 = hw * (1 - 0.4 * f);
-                line(c, -w2, yy, w2, yy);
-            }
-            for (i = 0; i < n; i++) {
-                var f0 = i / n, f1 = (i + 1) / n, y0 = botY + (topY - botY) * f0, y1 = botY + (topY - botY) * f1;
-                var w0 = hw * (1 - 0.4 * f0), w1 = hw * (1 - 0.4 * f1);
-                strokePath(c, [-w0, y0, w1, y1, w0, y0, -w1, y1]);
-            }
-            // the dish: an arc, an inner arc and the rim's chord, aimed a little off straight up
-            var R = 36, ang = [-0.55, -0.38, -0.22, 0.22, 0.38, 0.55, 0][seed % 7], a = Math.PI * 0.20, b2 = Math.PI * 0.80;
-            c.save();
-            c.translate(0, topY);
-            c.rotate(ang);
-            c.strokeStyle = rgba(hex, 0.7); c.lineWidth = 3;
-            c.beginPath(); c.arc(0, -R, R, a, b2); c.stroke();
-            c.lineWidth = 1;
-            c.beginPath(); c.arc(0, -R, R * 0.6, a, b2); c.stroke();
-            line(c, R * Math.cos(a), -R + R * Math.sin(a), R * Math.cos(b2), -R + R * Math.sin(b2));
-            c.strokeStyle = "#3a3358"; c.lineWidth = 2;
-            line(c, 0, 0, 0, -14);
-            c.fillStyle = rgba(hex, 0.95);
-            c.beginPath(); c.arc(0, 0, 4.5, 0, Math.PI * 2); c.fill();
-            c.restore();
+            var bw = 58, bh = 74, bx = -bw / 2, by = -bh;
+            gearFoot(c, bx, bw);
+            gearBox(c, bx, by, bw, bh, hex, 4);
+            c.fillStyle = GEAR.steel2; c.fillRect(bx + 1, -6, bw - 2, 5);                               // kick strip
+            gearSlats(c, bx + 6, by + 12, 24, 50, 5);                                                   // the door
+            c.fillStyle = GEAR.hi; c.fillRect(bx + 26, by + 34, 2, 6);
+            c.fillStyle = GEAR.dark; c.fillRect(bx + 35, by + 12, 17, 9);                               // status lights
+            gearLamp(c, bx + 37, by + 15, GEAR.ok, 2); gearLamp(c, bx + 41, by + 15, GEAR.ok, 2);
+            gearLamp(c, bx + 45, by + 15, (seed % 3 === 0) ? GEAR.warn : GEAR.ok, 2);
+            c.fillStyle = GEAR.steel3; c.fillRect(bx + 49, by + 15, 2, 2);
+            c.fillRect(bx + 42, by + 21, 3, bh - 27);                                                   // conduit, with two clamps
+            c.fillStyle = GEAR.hi; c.fillRect(bx + 41, by + 34, 5, 2); c.fillRect(bx + 41, by + 54, 5, 2);
+            dishStand(c, by, by - 30);
+            dishHead(c, by - 30, hex, seed);
         },
-        // the water tower: a stave tank on a braced stand, with a catwalk, hoops, a cap and a ladder
-        tank: function (c, hex) {
-            var w = 78, h = 80, legH = 26, hw = w / 2, tb = -5 - legH, ty = tb - h, steel = "#262a36";
-            var lineCol = rgba(hex, 0.5), faint = rgba(hex, 0.18), x, y, k;
+        // the roof access hut: the head of the stairs, a door with a steady lamp over it, a vent, a slab roof
+        hut: function (c, hex) {
+            var bw = 64, bh = 82, bx = -bw / 2, by = -bh, dx = bx + 8;
+            gearFoot(c, bx, bw);
+            gearBox(c, bx, by, bw, bh, hex, 0);
+            gearSteel(c, bx - 3, by - 4, bw + 6, 5);                                                    // the slab
+            var pool = c.createLinearGradient(0, by + 12, 0, 0);                                        // the lamp's light on the door
+            pool.addColorStop(0, "rgba(255,206,120,0.22)"); pool.addColorStop(1, "rgba(255,206,120,0)");
+            c.fillStyle = GEAR.dark; c.fillRect(dx, -66, 44, 64);
+            c.fillStyle = pool; c.fillRect(dx, -66, 44, 64);
+            c.strokeStyle = GEAR.hi; c.lineWidth = 1; c.strokeRect(dx + 0.5, -65.5, 43, 63);
+            c.strokeStyle = GEAR.seam; c.strokeRect(dx + 6.5, -59.5, 31, 24);
+            c.fillStyle = GEAR.hi; c.fillRect(dx + 35, -30, 3, 7);
+            c.fillStyle = GEAR.steel3; c.fillRect(dx + 15, by + 5, 14, 4);                              // the lamp over it
+            gearLamp(c, dx + 18, by + 9, GEAR.warm, 8);
+            gearSlats(c, bx + 55, by + 24, 6, 22, 4);                                                   // a vent beside the door
+        },
+        // the condenser bank: three low units on a skid, a fan guard and a light on each
+        condenser: function (c, hex, seed) {
+            var n = 3, uw = 26, uh = 30, W = n * uw + (n - 1) * 4, x0 = -W / 2, i;
+            gearFoot(c, x0, W);
+            gearSteel(c, x0 - 2, -4, W + 4, 4);                                                         // the skid
+            c.fillStyle = GEAR.steel3; c.fillRect(x0 + 8, -16, W - 16, 2);                              // the line that joins them
+            for (i = 0; i < n; i++) {
+                var ux = x0 + i * (uw + 4), uy = -4 - uh;
+                gearBox(c, ux, uy, uw, uh, hex, 0);
+                gearBars(c, ux + 4, uy + 5, 18, 14, 4);
+                gearLamp(c, ux + 20, uy + 23, ((seed + i) % 4 === 0) ? GEAR.warn : GEAR.ok, 2);
+            }
+        },
+        // the skylight: a low glazed lantern on a kerb, lit from the floor below, with some of that light on the air above
+        skylight: function (c, hex) {
+            var hw = 40, kerb = 8, rise = 24, ty = -kerb - rise, m;
+            var up = c.createLinearGradient(0, ty - 34, 0, ty);
+            up.addColorStop(0, rgba(hex, 0)); up.addColorStop(1, rgba(hex, 0.14));
+            c.fillStyle = up;
+            c.beginPath(); c.moveTo(-hw + 12, ty); c.lineTo(-hw - 4, ty - 34); c.lineTo(hw + 4, ty - 34); c.lineTo(hw - 12, ty); c.closePath(); c.fill();
+            gearFoot(c, -hw, hw * 2);
+            gearSteel(c, -hw, -kerb, hw * 2, kerb);
+            var glass = c.createLinearGradient(0, ty, 0, -kerb);
+            glass.addColorStop(0, rgba(hex, 0.16)); glass.addColorStop(1, rgba(hex, 0.5));
+            c.beginPath(); c.moveTo(-hw + 2, -kerb); c.lineTo(-hw + 12, ty); c.lineTo(hw - 12, ty); c.lineTo(hw - 2, -kerb); c.closePath();
+            c.fillStyle = GEAR.dark; c.fill(); c.fillStyle = glass; c.fill();
+            c.strokeStyle = rgba(hex, 0.85); c.lineWidth = 1.5; c.shadowColor = rgba(hex, 1); c.shadowBlur = 3; c.stroke(); c.shadowBlur = 0;
+            c.strokeStyle = "rgba(7,8,12,0.75)"; c.lineWidth = 1.5; c.beginPath();                      // glazing bars
+            for (m = -2; m <= 2; m++) { c.moveTo(m * 13, ty + 1); c.lineTo(m * 14, -kerb); }
+            c.stroke();
+            gearSteel(c, -hw + 10, ty - 3, (hw - 10) * 2, 3);                                           // ridge cap
+        },
+        // the panel array: a flat aerial panel, face on, on a braced pedestal, some emitters lit, its box on the deck
+        array: function (c, hex, seed) {
+            var pw = 48, ph = 34, px = -pw / 2, py = -56, r, col;
+            gearSteel(c, -12, -4, 24, 4);
+            c.fillStyle = GEAR.steel2; c.fillRect(-3, -26, 6, 22);
+            c.fillStyle = GEAR.hi; c.fillRect(-3, -26, 1, 22);
+            c.strokeStyle = GEAR.steel3; c.lineWidth = 2; line(c, 3, -8, 15, -24);
+            gearBox(c, px, py, pw, ph, hex, 4);
+            for (r = 0; r < 4; r++) for (col = 0; col < 7; col++) {
+                if (((seed * 7 + r * 5 + col * 3) % 5) < 2) gearLamp(c, px + 5 + col * 6, py + 5 + r * 7, rgba(hex, 0.9), 3);
+                else { c.fillStyle = GEAR.steel3; c.fillRect(px + 5 + col * 6, py + 5 + r * 7, 3, 3); }
+            }
+            gearSteel(c, 16, -11, 10, 11);                                                              // its box, and the cable to it
+            gearLamp(c, 20, -7, GEAR.ok, 2);
+            c.strokeStyle = GEAR.seam; c.lineWidth = 1; line(c, 20, py + ph, 21, -11);
+        },
+        // the tank: a steel vessel on a braced stand, with flange bands, a sight glass lit in the building's
+        // colour, a hatch and a vent, an outlet with its valve, a catwalk and a ladder
+        tank: function (c, hex, seed) {
+            var w = 78, h = 80, legH = 26, hw = w / 2, capH = 12, sh = 10, tb = -5 - legH, ty = tb - h, steel = "#262a36";
+            var lit = rgba(hex, 0.85), faint = rgba(hex, 0.18), glow = rgba(hex, 1), k, y;
             c.fillStyle = steel; c.fillRect(-hw - 8, -5, w + 16, 5);                                    // grillage beam
             c.strokeStyle = faint; c.lineWidth = 1; line(c, -hw - 8, -4.5, hw + 8, -4.5);
             c.strokeStyle = steel; c.lineWidth = 2.5;                                                   // the stand
             strokePath(c, [-w / 6, tb, -w / 6, -5, w / 6, tb, w / 6, -5]);
-            c.strokeStyle = "rgba(140,160,180,0.5)"; c.lineWidth = 1.1;
-            strokePath(c, [-hw + 5, tb, hw + 3, -5, hw - 5, tb, -hw - 3, -5]);
-            c.strokeStyle = steel; c.lineWidth = 3.5;
-            strokePath(c, [-hw + 5, tb, -hw - 3, -5, hw - 5, tb, hw + 3, -5]);
+            gearTruss(c, -hw + 5, tb, -hw - 3, -5, hw - 5, tb, hw + 3, -5, steel, faint);
+            var ox = w / 6 + 10, vy = tb + Math.round(legH * 0.5);                                      // the outlet and its valve
+            c.fillStyle = steel; c.fillRect(ox - 2, tb, 4, legH); c.fillRect(ox - 5, vy - 3, 10, 6);
+            c.strokeStyle = "#C8343A"; c.lineWidth = 2; line(c, ox - 6, vy - 6, ox + 6, vy - 6);
+            c.strokeStyle = faint; c.lineWidth = 1; line(c, ox, vy - 6, ox, vy - 3);
             c.fillStyle = steel; c.fillRect(-hw - 6, tb - 2, w + 12, 3);                                // catwalk
-            c.strokeStyle = faint; c.lineWidth = 1;
             strokePath(c, [-hw - 6, tb - 11, -hw - 6, tb - 2, hw + 6, tb - 11, hw + 6, tb - 2, -hw - 6, tb - 11, -hw, tb - 11, hw, tb - 11, hw + 6, tb - 11]);
-            c.fillStyle = "#171130"; c.strokeStyle = lineCol; c.lineWidth = 1.5;                        // the tank
-            c.fillRect(-hw, ty, w, h); c.strokeRect(-hw, ty, w, h);
-            c.strokeStyle = faint; c.lineWidth = 1;
-            for (x = -hw + 7; x < hw - 3; x += 7) line(c, x, ty + 2, x, tb - 2);
-            c.strokeStyle = steel; c.lineWidth = 2.5;                                                   // hoops
-            for (k = 1; k <= 3; k++) { y = ty + h * k / 4; line(c, -hw - 1, y, hw + 1, y); }
-            c.strokeStyle = faint; c.lineWidth = 0.8;
-            for (k = 1; k <= 3; k++) { y = ty + h * k / 4 - 1; line(c, -hw - 1, y, hw + 1, y); }
-            var capH = Math.round(w * 0.26);                                                            // conical cap and finial
-            c.fillStyle = "#171130"; c.strokeStyle = lineCol; c.lineWidth = 1.5;
-            c.beginPath(); c.moveTo(-hw - 4, ty); c.lineTo(0, ty - capH); c.lineTo(hw + 4, ty); c.closePath(); c.fill(); c.stroke();
-            c.fillStyle = steel; c.fillRect(-3, ty - capH - 6, 6, 6);
+            c.fillStyle = "#151822"; c.strokeStyle = lit; c.lineWidth = 1.5;                            // the vessel
+            c.beginPath(); c.moveTo(-hw, tb); c.lineTo(-hw, ty); c.lineTo(-hw + sh, ty - capH); c.lineTo(hw - sh, ty - capH); c.lineTo(hw, ty); c.lineTo(hw, tb); c.closePath(); c.fill();
+            c.shadowColor = lit; c.shadowBlur = 3; c.stroke(); c.shadowBlur = 0;
+            c.strokeStyle = faint; c.lineWidth = 1;                                                     // weld seams
+            strokePath(c, [-hw * 0.28, ty + 2, -hw * 0.28, tb - 2, hw * 0.4, ty + 2, hw * 0.4, tb - 2]);
+            for (k = 1; k <= 3; k++) {                                                                  // flange bands
+                y = Math.round(ty + h * k / 4);
+                c.fillStyle = steel; c.fillRect(-hw - 1, y - 1, w + 2, 3);
+                c.fillStyle = faint; c.fillRect(-hw - 1, y - 1, w + 2, 1);
+            }
+            c.fillStyle = steel; c.fillRect(-10, ty - capH - 4, 20, 4);                                 // the hatch, and a vent
+            c.fillRect(-hw + sh + 4, ty - capH - 9, 4, 9); c.fillRect(-hw + sh + 2, ty - capH - 11, 8, 3);
+            var sgx = -hw + 8, sgy = ty + 8, sgh = h - 16, lvl = 0.35 + ((seed * 37) % 45) / 100;       // the sight glass
+            c.fillStyle = "#05060a"; c.fillRect(sgx, sgy, 6, sgh);
+            c.fillStyle = glow; c.shadowColor = glow; c.shadowBlur = 4;
+            c.fillRect(sgx + 1, Math.round(sgy + sgh * (1 - lvl)), 4, Math.round(sgh * lvl) - 1);
+            c.shadowBlur = 0;
+            c.fillStyle = faint;
+            for (k = 0; k <= 4; k++) c.fillRect(sgx + 8, Math.round(sgy + sgh * k / 4), k % 2 ? 2 : 4, 1);
             c.strokeStyle = faint; c.lineWidth = 1;                                                     // ladder
             line(c, hw - 14, tb - 2, hw - 14, ty - 2); line(c, hw - 7, tb - 2, hw - 7, ty - 2);
             for (y = tb - 8; y > ty; y -= 6) line(c, hw - 14, y, hw - 7, y);
