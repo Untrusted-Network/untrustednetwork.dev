@@ -80,18 +80,18 @@
     function boxesSig(boxes) { return boxes.map(function (q) { return q.l + "," + q.r + "," + q.b; }).join(";"); }
 
     var BUILDINGS = [
-        { name: "MARKET ROW",   hex: "#00DFFF", w: 620, h: 450, ent: 0, roof: [[0.2, "condenser"], [0.5, "hut"], [0.8, "skylight"]] },
+        { name: "MARKET ROW",   hex: "#00DFFF", w: 620, h: 450, ent: 0, roof: [[0.2, "condenser"], [0.5, "hut"], [0.8, "array"]] },
         { name: "PIXEL ARCADE", hex: "#FF1493", w: 560, h: 560, ent: 3, tall: true, roof: [[0.2, "dishbox"], [0.5, "tank"], [0.82, "beacon"]],
           posters: [{ side: -1, yf: 0.28, art: "overdrive", title: "OVERDRIVE", col: "#FF1493" }, { side: -1, yf: 0.6, art: "shatter", title: "SHATTER", col: "#FF8C00" }] },
         { name: "SUBGRID HUB",  hex: "#8A2BE2", w: 600, h: 400, ent: 1, roof: [[0.2, "hut"], [0.5, "array"], [0.82, "ventbox"]] },
         { name: "CHIP CLINIC",  hex: "#39FF14", w: 640, h: 440, ent: 0, roof: [[0.2, "beacon"], [0.5, "dishbox"], [0.82, "junction"]] },
-        { name: "GRID TOWER",   hex: "#00DFFF", w: 520, h: 460, ent: 3, roof: [[0.2, "ventbox"], [0.5, "skylight"], [0.82, "tank"]] },
+        { name: "GRID TOWER",   hex: "#00DFFF", w: 520, h: 460, ent: 3, roof: [[0.2, "ventbox"], [0.5, "condenser"], [0.82, "tank"]] },
         { name: "CIPHER STACK", hex: "#FF1493", w: 600, h: 410, ent: 1, roof: [[0.2, "array"], [0.5, "hut"], [0.82, "dishbox"]] }
     ];
     // The game's roof gear and how far each piece rises above the deck, in its pixels. One that would
     // reach the words above it gives way to one of the low pieces, or is left off.
-    var ROOF_H = { condenser: 38, junction: 52, array: 60, skylight: 70, hut: 90, ventbox: 94, beacon: 134, tank: 140, dishbox: 144 };
-    var ROOF_LOW = ["condenser", "skylight", "array", "junction"];
+    var ROOF_H = { condenser: 38, junction: 52, array: 60, hut: 90, ventbox: 94, beacon: 134, tank: 140, dishbox: 144 };
+    var ROOF_LOW = ["condenser", "array", "junction"];
     // the room kept above a roof, where the screen has it: enough for the tallest gadget planned for it
     function roofSpace(def) {
         return def.roof.reduce(function (m, g) { return Math.max(m, ROOF_H[g[1]]); }, 0) + 8;
@@ -237,7 +237,7 @@
             // the low pieces; where there is little, the wall takes all of it, since rows of windows
             // matter more than a condenser.
             room = roomOver(x, x + w);
-            space = [roofSpace(def), ROOF_H.skylight + 8, ROOF_H.condenser + 8].filter(function (sp) { return room - sp * K >= 200 * K; })[0];
+            space = [roofSpace(def), ROOF_H.array + 8, ROOF_H.condenser + 8].filter(function (sp) { return room - sp * K >= 200 * K; })[0];
             h = space ? Math.min(def.h * K, room - space * K) : Math.max(150 * K, Math.min(def.h * K, room - 8));
             S.near.push({ x: x, w: w, h: h, def: def, idx: i, room: room });
             gap = GAPS[slot] * K;
@@ -817,25 +817,6 @@
                 gearBars(c, ux + 4, uy + 5, 18, 14, 4);
                 gearLamp(c, ux + 20, uy + 23, ((seed + i) % 4 === 0) ? GEAR.warn : GEAR.ok, 2);
             }
-        },
-        // the skylight: a low glazed lantern on a kerb, lit from the floor below, with some of that light on the air above
-        skylight: function (c, hex) {
-            var hw = 40, kerb = 8, rise = 24, ty = -kerb - rise, m;
-            var up = c.createLinearGradient(0, ty - 34, 0, ty);
-            up.addColorStop(0, rgba(hex, 0)); up.addColorStop(1, rgba(hex, 0.14));
-            c.fillStyle = up;
-            c.beginPath(); c.moveTo(-hw + 12, ty); c.lineTo(-hw - 4, ty - 34); c.lineTo(hw + 4, ty - 34); c.lineTo(hw - 12, ty); c.closePath(); c.fill();
-            gearFoot(c, -hw, hw * 2);
-            gearSteel(c, -hw, -kerb, hw * 2, kerb);
-            var glass = c.createLinearGradient(0, ty, 0, -kerb);
-            glass.addColorStop(0, rgba(hex, 0.16)); glass.addColorStop(1, rgba(hex, 0.5));
-            c.beginPath(); c.moveTo(-hw + 2, -kerb); c.lineTo(-hw + 12, ty); c.lineTo(hw - 12, ty); c.lineTo(hw - 2, -kerb); c.closePath();
-            c.fillStyle = GEAR.dark; c.fill(); c.fillStyle = glass; c.fill();
-            c.strokeStyle = rgba(hex, 0.85); c.lineWidth = 1.5; c.shadowColor = rgba(hex, 1); c.shadowBlur = 3; c.stroke(); c.shadowBlur = 0;
-            c.strokeStyle = "rgba(7,8,12,0.75)"; c.lineWidth = 1.5; c.beginPath();                      // glazing bars
-            for (m = -2; m <= 2; m++) { c.moveTo(m * 13, ty + 1); c.lineTo(m * 14, -kerb); }
-            c.stroke();
-            gearSteel(c, -hw + 10, ty - 3, (hw - 10) * 2, 3);                                           // ridge cap
         },
         // the panel array: a flat aerial panel, face on, on a braced pedestal, some emitters lit, its box on the deck
         array: function (c, hex, seed) {
