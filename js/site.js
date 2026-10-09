@@ -99,7 +99,7 @@
     // Street furniture for each gap between buildings, as [distance from the gap's start, kind]. The
     // streetlight stands near the middle; everything keeps clear of it and of the walls either side.
     var STREET = [
-        [[54, "bench"], [176, "vending"], [226, "booth"]],
+        [[62, "bench"], [184, "vending"], [250, "booth"]],
         [[50, "tree"], [205, "cabinet"], [264, "hydrant"]],
         [[40, "bin"], [170, "bench"]],
         [[48, "vending"], [230, "bench"], [290, "bin"]],
@@ -114,7 +114,7 @@
     ];
     var CABINET_STREET = { body: "#0f2418", face: "#143222", edge: "#2FBF71", dim: "rgba(47,191,113,0.45)" };
     var CABINET_ROOF = { body: "#171b20", face: "#20252c", edge: "#8A96A3", dim: "rgba(138,150,163,0.45)" };
-    var GAPS = [260, 300, 240, 320, 280, 300];
+    var GAPS = [300, 300, 240, 320, 280, 300];
     var ARCADE = 1;         // the Pixel Arcade's place in the list: the street is laid out around it
     var FACADE = { winW: 18, winH: 26, gapX: 36, gapY: 46, pad: 36, padMin: 14, storeH: 114, bayW: 60, corner: 10, edge: 4, edgeAlpha: 0.42, signY: 134, plateH: 20 };
     // The game's three skyline layers (preRenderSkyline), far to near: where the towers stand, their
