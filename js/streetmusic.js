@@ -85,7 +85,7 @@
     // ─── The house tunes ───────────────────────────────────────────────────
     // The Pixel Arcade's chip tune (city_arcade.js): sixteen steps a bar, Am F C G.
     var ARCADE = {
-        step: 0.17, lowpass: 900, level: 0.55,
+        step: 0.17, lowpass: 900, level: 4.8,
         lead: [
             [69, 0, 72, 76, 81, 0, 76, 72, 69, 0, 72, 76, 79, 76, 72, 0],
             [65, 0, 69, 72, 77, 0, 72, 69, 65, 0, 69, 72, 76, 72, 69, 0],
@@ -97,7 +97,7 @@
     };
     // Keystone's hold music (city_comm_booths.js): four bars of arpeggio over a bass note, in eighths.
     var HOLD = {
-        step: 0.19, level: 1.4,
+        step: 0.19, level: 12,
         bars: [
             [261.6, 329.6, 392.0, 329.6, 523.3, 392.0, 329.6, 392.0],
             [220.0, 261.6, 329.6, 261.6, 440.0, 329.6, 261.6, 329.6],
@@ -230,7 +230,10 @@
             street = ctx.createGain();
             street.connect(sidechain);
             house = ctx.createGain();
-            house.connect(master);
+            var limit = ctx.createDynamicsCompressor();             // holds down the loudest hits of a house tune
+            limit.threshold.value = -1; limit.knee.value = 0; limit.ratio.value = 12;
+            limit.attack.value = 0.001; limit.release.value = 0.08;
+            house.connect(limit); limit.connect(master);
 
             out = ctx.createGain();
             var comp = ctx.createDynamicsCompressor();
