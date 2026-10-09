@@ -99,8 +99,8 @@
     // Street furniture for each gap between buildings, as [distance from the gap's start, kind]. The
     // streetlight stands near the middle; everything keeps clear of it and of the walls either side.
     var STREET = [
-        [[54, "bench"], [176, "vending"], [226, "hydrant"]],
-        [[50, "tree"], [205, "cabinet"], [262, "bin"]],
+        [[54, "bench"], [176, "vending"], [226, "booth"]],
+        [[50, "tree"], [205, "cabinet"], [264, "hydrant"]],
         [[40, "bin"], [170, "bench"]],
         [[48, "vending"], [230, "bench"], [290, "bin"]],
         [[62, "cabinet"], [200, "tree"]],
@@ -142,7 +142,9 @@
     // An Overwatch patrol drone comes through now and then, sooner when the heat is high.
     var PATROL = { col: "#6E6E6E", scale: 1.5, height: 180, speed: 90, first: 9, every: [24, 22], beam: 40 };
     // What can be clicked in the street, as [half-width, height] in the game's pixels.
-    var PROP_BOX = { bench: [33, 38], bin: [13, 33], vending: [18, 60], tree: [30, 90], cabinet: [32, 47], hydrant: [12, 34] };
+    var PROP_BOX = { bench: [33, 38], bin: [13, 33], vending: [18, 60], tree: [30, 90], cabinet: [32, 47], hydrant: [12, 34], booth: [18, 63] };
+    // Keystone's support line, rung from the comm booth: what it says while you hold
+    var HOLD = { seconds: 20, each: 5, col: "#8FB8C8", lines: ["YOUR CALL IS IMPORTANT TO US.", "YOUR CALL MAY BE RECORDED TO IMPROVE YOUR EXPERIENCE.", "YOUR CALL IS VERY IMPORTANT TO US."] };
     var LAMP = { poleH: 168, baseW: 12, baseH: 38, taperH: 10, doorW: 8, doorTop: 35, doorBot: 23 };
     // Overwatch hardware: black body, grey edge, red only in the eye and the beam.
     var CAM = { body: "#000000", edge: "#6E6E6E", eye: "#FF0000", sweep: 0.75, half: 0.2, rate: 0.45, downFor: 12, height: 150 };
@@ -150,7 +152,7 @@
     var OP_COLOURS = ["#FF1493", "#00DFFF", "#39FF14", "#FF3E00", "#8A2BE2"];
     var HEAT = { rise: 34, fall: 14, grace: 1.2, tag: 20, cam: 30 };
     var SCAN = { range: 900, time: 0.7, show: 6 };
-    var TAG_ORDER = ["operator_mark", "crown", "term_10print", "glitch_eye", "bolt", "term_nocarrier", "null_sig", "arrow_up", "term_goto10", "circuit", "term_ready", "term_ath0"];
+    var TAG_ORDER = ["operator_mark", "crown", "glitch_eye", "offbook", "bolt", "null_sig", "crimson_row", "arrow_up", "circuit", "stackrunners", "gridrot"];
     var TAG_MAX = 10, TAG_HALF = 18, TAG_TIME = 0.6;
 
     var op = { x: 0, dir: 1, target: 0, wanderAt: 0, colour: 0 };
@@ -158,6 +160,7 @@
     var tags = [], tagNext = 0, scan = null, camDownUntil = 0;
     var cars = [], patrol = null, patrolAt = PATROL.first, bits = [], floats = [];
     var arcadeOpenUntil = 0;        // while the arcade's door stands lit and its tune plays
+    var holdCall = null;            // a call to Keystone in progress: { t0, until, lines, x }
     var heat = 0, seen = false, lastSeen = -10, lastPointer = -10, lastHud = -1, pointerIn = false;
 
     function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
@@ -882,6 +885,51 @@
         ctx.restore();
     }
 
+    // The comm booth: two posts and a hood, solid glass, the wall unit with its screen and handset.
+    // While a call is on, the screen is lit and the handset is off its hook.
+    STREET_DRAW.booth = function (c) {
+        var col = HOLD.col, onCall = !!holdCall;
+        c.scale(0.75, 0.75);
+        c.fillStyle = "#0b1016"; c.fillRect(-20, -4, 40, 4);
+        c.strokeStyle = col; c.lineWidth = 2;
+        strokePath(c, [-18, -4, -18, -76, 18, -4, 18, -76]);
+        c.fillStyle = "#111820"; c.fillRect(-24, -84, 48, 10);
+        c.strokeRect(-24, -84, 48, 10);
+        c.fillStyle = "rgba(143,184,200,0.85)"; c.font = "bold 7px 'Source Code Pro', monospace";
+        c.textAlign = "center"; c.textBaseline = "middle"; c.fillText("COMM", 0, -78.5);
+        c.fillStyle = "#0c141b"; c.fillRect(-16, -72, 32, 60);
+        c.fillStyle = "rgba(143,184,200,0.08)"; c.beginPath(); c.moveTo(-16, -72); c.lineTo(-4, -72); c.lineTo(-16, -50); c.closePath(); c.fill();
+        c.strokeStyle = "rgba(143,184,200,0.35)"; c.lineWidth = 1; c.strokeRect(-16.5, -72.5, 33, 61);
+        c.fillStyle = "#18222c"; c.fillRect(-9, -60, 18, 26);
+        c.strokeStyle = col; c.strokeRect(-8.5, -59.5, 17, 25);
+        c.fillStyle = onCall ? "#DDF3FF" : "rgba(143,184,200,0.45)"; c.fillRect(-6, -56, 12, 6);
+        c.fillStyle = "#0b1016";
+        if (onCall) {                                           // lifted, the cord drawn out with it
+            c.beginPath(); c.moveTo(9, -50); c.quadraticCurveTo(15, -40, 10, -30); c.stroke();
+            c.save(); c.translate(10, -30); c.rotate(-0.5);
+            c.fillRect(-2, -16, 4, 17); c.strokeRect(-1.5, -15.5, 3, 16); c.restore();
+        } else {                                                // on its hook
+            c.fillRect(9, -58, 4, 17); c.strokeRect(9.5, -57.5, 3, 16);
+            c.beginPath(); c.moveTo(11, -41); c.quadraticCurveTo(16, -30, 6, -34); c.stroke();
+        }
+    };
+
+    // What Keystone's line says, in a framed box over the booth while the call lasts.
+    function drawHold(t) {
+        if (!holdCall) return;
+        if (t >= holdCall.until) { holdCall = null; return; }
+        var text = holdCall.lines[Math.min(holdCall.lines.length - 1, Math.floor((t - holdCall.t0) / HOLD.each))];
+        ctx.save();
+        ctx.font = "600 " + Math.max(10, 10 * K).toFixed(1) + "px 'Source Code Pro', monospace";
+        var tw = ctx.measureText(text).width, w = tw + 20, h = 22;
+        var x = clamp(holdCall.x - w / 2, 12, Math.max(12, W - 12 - w)), y = S.gy - PROP_BOX.booth[1] * K - 14 - h;
+        ctx.fillStyle = "rgba(3,3,9,0.9)"; ctx.fillRect(x, y, w, h);
+        ctx.strokeStyle = HOLD.col; ctx.lineWidth = 1; ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+        ctx.fillStyle = HOLD.col; ctx.textAlign = "left"; ctx.textBaseline = "middle";
+        ctx.fillText(text, x + 10, y + h / 2 + 1);
+        ctx.restore();
+    }
+
     // Street furniture is drawn every frame, so a bin can rattle and a tree can sway.
     function drawProps(t) {
         S.props.forEach(function (p) {
@@ -1219,17 +1267,6 @@
         for (var i = 1; i < pts.length; i++) c.lineTo(pts[i][0], pts[i][1]);
         c.closePath();
     }
-    function tagTerm(c, s, col, lines, cursor) {
-        c.fillStyle = col; c.textAlign = "center"; c.textBaseline = "middle";
-        var longest = lines.reduce(function (m, l) { return Math.max(m, l.length + (cursor ? 1 : 0)); }, 1);
-        var size = Math.min(s * 1.9 / (longest * 0.6), s * 1.6 / lines.length);
-        c.font = "bold " + size.toFixed(1) + "px 'Source Code Pro', monospace";
-        lines.forEach(function (l, i) {
-            var y = (i - (lines.length - 1) / 2) * size * 1.02;
-            c.fillText(l, cursor ? -size * 0.3 : 0, y);
-            if (cursor && i === lines.length - 1) c.fillRect(-size * 0.3 + c.measureText(l).width / 2 + size * 0.12, y - size * 0.42, size * 0.5, size * 0.84);
-        });
-    }
     var TAG_STYLES = {
         operator_mark: { drips: [[0, 1], [-0.6, 0.72]], draw: function (c, s, col) {
             var pts = [], i, a;
@@ -1280,11 +1317,44 @@
             });
             c.beginPath(); c.moveTo(s * 0.5, 0); c.lineTo(s * 0.9, s * 0.35); c.lineTo(s * 0.9, s * 0.7); c.stroke();
         } },
-        term_10print: { drips: [[-0.6, 0.3], [0.5, 0.3]], draw: function (c, s, col) { tagTerm(c, s, col, ["10 PRINT"]); } },
-        term_goto10: { drips: [[-0.5, 0.3], [0.6, 0.3]], draw: function (c, s, col) { tagTerm(c, s, col, ["GOTO 10"]); } },
-        term_nocarrier: { drips: [[-0.6, 0.75], [0.4, 0.75]], draw: function (c, s, col) { tagTerm(c, s, col, ["NO", "CARRIER"]); } },
-        term_ath0: { drips: [[-0.6, 0.3], [0.5, 0.3]], draw: function (c, s, col) { tagTerm(c, s, col, ["+++ATH0"]); } },
-        term_ready: { drips: [[-0.6, 0.35], [0.3, 0.35]], draw: function (c, s, col) { tagTerm(c, s, col, ["READY."], true); } }
+        // the four syndicate marks
+        offbook: { drips: [[-0.75, 0.9], [0.5, 0.9]], draw: function (c, s, col) {         // a ledger struck through
+            tagStroke(c, s, col);
+            c.strokeRect(-s * 0.75, -s * 0.9, s * 1.5, s * 1.8);
+            c.beginPath();
+            for (var i = -1; i <= 1; i++) { c.moveTo(-s * 0.45, i * s * 0.45); c.lineTo(s * 0.45, i * s * 0.45); }
+            c.moveTo(-s, s); c.lineTo(s, -s);
+            c.stroke();
+        } },
+        crimson_row: { drips: [[0, 0.99], [-0.85, 0.54]], draw: function (c, s, col) {      // three chevrons
+            tagStroke(c, s, col);
+            c.beginPath();
+            for (var i = 0; i < 3; i++) {
+                var y = -s * 0.7 + i * s * 0.62;
+                c.moveTo(-s * 0.85, y); c.lineTo(0, y + s * 0.45); c.lineTo(s * 0.85, y);
+            }
+            c.stroke();
+        } },
+        stackrunners: { drips: [[-0.8, 0.85], [0.65, 0.85]], draw: function (c, s, col) {   // stacked floors, one way up
+            tagStroke(c, s, col);
+            c.beginPath();
+            for (var i = 0; i < 3; i++) { var y = s * 0.85 - i * s * 0.42; c.moveTo(-s * 0.8 + i * s * 0.12, y); c.lineTo(s * 0.35 - i * s * 0.12, y); }
+            c.moveTo(s * 0.65, s * 0.85); c.lineTo(s * 0.65, -s * 0.9);
+            c.moveTo(s * 0.3, -s * 0.5); c.lineTo(s * 0.65, -s * 0.9); c.lineTo(s, -s * 0.5);
+            c.stroke();
+        } },
+        gridrot: { drips: [[-0.9, 0.9], [0.3, 0.9]], draw: function (c, s, col) {           // a grid with pieces missing
+            var g = s * 0.9, t = g / 3 * 2;
+            tagStroke(c, s, col);
+            c.beginPath();
+            c.moveTo(-g, -g); c.lineTo(g - t * 0.6, -g);
+            c.moveTo(g, -g + t * 0.6); c.lineTo(g, g); c.lineTo(-g, g); c.lineTo(-g, -g);
+            c.moveTo(-g / 3, -g); c.lineTo(-g / 3, g * 0.2);
+            c.moveTo(g / 3, -g * 0.1); c.lineTo(g / 3, g);
+            c.moveTo(-g, -g / 3); c.lineTo(g * 0.1, -g / 3);
+            c.moveTo(-g * 0.3, g / 3); c.lineTo(g, g / 3);
+            c.stroke();
+        } }
     };
     function tagHalf() { return Math.max(13, TAG_HALF * K); }
 
@@ -1454,6 +1524,7 @@
         drawDrone();
         drawBits(dt);
         drawFloats(t);
+        drawHold(t);
         drawScan(t);
         if (dt > 0) drawRain(dt);
         return cone;
@@ -1491,7 +1562,7 @@
     // edge with it; the drone pulses the scanner; the camera burns out for a while, or comes back;
     // a streetlight breaks or is mended; a bare wall takes a tag; the vending machine drops a can, a
     // bin can be rummaged, the hydrant sprays and a tree shakes. The arcade's door lets its tune out,
-    // and Keystone's motto, down among the cards, puts you on hold.
+    // and the comm booth rings Keystone, who put you on hold.
     function setOperatorColour(i) {
         op.colour = i % OP_COLOURS.length;
         var root = document.documentElement.style;
@@ -1545,6 +1616,16 @@
                 for (i = 0; i < 11; i++) addBit(p.x + d * 11 * K, gy - 15 * K + (Math.random() - 0.5) * 3, d * (96 + Math.random() * 144) * K, -(18 + Math.random() * 78) * K, ["#00DFFF", "#2BD1FC", "#7BFFF0", "#FFFFFF"][i % 4], (1.2 + Math.random() * 1.6) * K, 0.8 + Math.random() * 0.8);
             });
             hiss(0.7, "bandpass", 2400, 0.12);
+        } else if (p.kind === "booth") {
+            // Keystone's support line: the hold music and what it says, or hang up if a call is on.
+            // With the sound off the lines still show.
+            if (holdCall) {
+                if (player && player.tunePlaying() === "hold") player.stopTune(); else holdCall = null;
+            } else {
+                if (player) player.playTune("hold", HOLD.seconds, function () { holdCall = null; });
+                holdCall = { t0: t, until: t + HOLD.seconds, x: p.x,
+                    lines: ["PLEASE HOLD. YOU ARE CALLER " + (50 + Math.floor(Math.random() * 15)) + "."].concat(HOLD.lines) };
+            }
         } else if (p.kind === "tree") {
             p.shakeUntil = t + 0.8;
             for (i = 0; i < 5; i++) { dir = (Math.random() - 0.5); addBit(p.x + dir * 40 * K, gy - (50 + Math.random() * 30) * K, dir * 40 * K, 10 * K, i % 2 ? "#2CC30F" : "#5BE83C", 2.4 * K, 1.6, 120 * K); }
@@ -1632,30 +1713,6 @@
             updateHeat(t, dt, frame(t, dt));
         };
         requestAnimationFrame(loop);
-    }
-
-    // Keystone's motto on its card rings the support line: the hold music and the lines that go with
-    // it for twenty seconds, then the card is as it was. With the sound off the lines still show.
-    var holdTag = document.querySelector(".card-keystone .card-tag"), holdText = holdTag ? holdTag.textContent : "", holdTimers = [];
-    function endHold() {
-        holdTimers.forEach(clearTimeout);
-        holdTimers = [];
-        holdTag.textContent = holdText;
-        holdTag.classList.remove("holding");
-    }
-    if (holdTag) {
-        holdTag.addEventListener("click", function () {
-            if (holdTag.classList.contains("holding")) {
-                if (player && player.tunePlaying() === "hold") player.stopTune(); else endHold();
-                return;
-            }
-            var lines = ["Please hold. You are caller " + (50 + Math.floor(Math.random() * 15)) + ".", "Your call is important to us.",
-                "Your call may be recorded to improve your experience.", "Your call is very important to us."];
-            var heard = !!player && player.playTune("hold", 20, endHold);
-            holdTag.classList.add("holding");
-            lines.forEach(function (l, i) { holdTimers.push(setTimeout(function () { holdTag.textContent = l; }, i * 5000)); });
-            if (!heard) holdTimers.push(setTimeout(endHold, 20000));
-        });
     }
 
     // The footer hangs up; a click on it dials in again.
