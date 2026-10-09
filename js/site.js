@@ -157,6 +157,7 @@
     var drone = { x: 0, y: 0 };
     var tags = [], tagNext = 0, scan = null, camDownUntil = 0;
     var cars = [], patrol = null, patrolAt = PATROL.first, bits = [], floats = [];
+    var arcadeOpenUntil = 0;        // while the arcade's door stands lit and its tune plays
     var heat = 0, seen = false, lastSeen = -10, lastPointer = -10, lastHud = -1, pointerIn = false;
 
     function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
@@ -245,6 +246,7 @@
         // The camera hangs on the arcade's wall, clear of its door and its sign.
         S.near.forEach(function (b) {
             if (b.idx !== ARCADE) return;
+            S.arcade = b;
             var lo = Math.max(b.x, 0) + 40 * K, hi = Math.min(b.x + b.w, W) - 40 * K;
             S.cam = { x: clamp(b.x + b.w * 0.8, lo, Math.max(lo, hi)), y: gy - Math.min(CAM.height * K, b.h - 30 * K) };
         });
@@ -863,6 +865,23 @@
         }
     };
 
+    // The arcade's door, lit from inside while its tune is playing.
+    function drawArcadeDoor(t) {
+        var b = S.arcade;
+        if (!b || t >= arcadeOpenUntil) return;
+        var hex = b.def.hex, cx = b.x + b.w / 2, gy = S.gy, w = 44 * K, h = 64 * K, glow = 0.75 + 0.25 * Math.sin(t * 9);
+        ctx.save();
+        ctx.fillStyle = rgba(hex, 0.10 * glow);                     // light spilled on the pavement
+        ctx.beginPath(); ctx.moveTo(cx - w / 2, gy); ctx.lineTo(cx + w / 2, gy); ctx.lineTo(cx + w * 1.5, gy + 14 * K); ctx.lineTo(cx - w * 1.5, gy + 14 * K); ctx.closePath(); ctx.fill();
+        ctx.shadowColor = hex; ctx.shadowBlur = 14 * DPR;
+        ctx.fillStyle = rgba(hex, 0.42 * glow);
+        ctx.fillRect(cx - w / 2 + 2, gy - h + 2, w - 4, h - 2);
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = "rgba(255,255,255," + (0.10 * glow).toFixed(3) + ")";
+        ctx.fillRect(cx - 1, gy - h + 2, 2, h - 2);
+        ctx.restore();
+    }
+
     // Street furniture is drawn every frame, so a bin can rattle and a tree can sway.
     function drawProps(t) {
         S.props.forEach(function (p) {
@@ -1426,6 +1445,7 @@
         drawCars();
         ctx.drawImage(frontLayer, 0, 0, W, H);
         drawTags(t);
+        drawArcadeDoor(t);
         drawProps(t);
         S.lamps.forEach(drawLamp);
         var cone = S.cam ? drawCamera(t) : null;
@@ -1440,8 +1460,8 @@
     }
 
     // ─── The tune ──────────────────────────────────────────────────────────
-    // js/streetmusic.js plays it: a piece written for this page, composed as it goes. It starts only
-    // when the button is pressed (browsers allow nothing sooner), and its tension follows the heat.
+    // js/streetmusic.js plays it: the game's own Lower Streets music, composed as it goes. It starts
+    // only when the button is pressed (browsers allow nothing sooner), and its tension follows the heat.
     var soundBtn = document.getElementById("sound");
     var player = (window.StreetMusic && (window.AudioContext || window.webkitAudioContext))
         ? window.StreetMusic.create({ volume: 0.6 }) : null;
@@ -1470,7 +1490,8 @@
     // Nothing marks them (the game's rule for secrets). The operator changes colour, and the page's
     // edge with it; the drone pulses the scanner; the camera burns out for a while, or comes back;
     // a streetlight breaks or is mended; a bare wall takes a tag; the vending machine drops a can, a
-    // bin can be rummaged, the hydrant sprays and a tree shakes.
+    // bin can be rummaged, the hydrant sprays and a tree shakes. The arcade's door lets its tune out,
+    // and Keystone's motto, down among the cards, puts you on hold.
     function setOperatorColour(i) {
         op.colour = i % OP_COLOURS.length;
         var root = document.documentElement.style;
@@ -1495,6 +1516,14 @@
         if (tags.length > TAG_MAX) tags.shift();
         hiss(0.5, "highpass", 3600, 0.1);
         if (seen) heat = clamp(heat + HEAT.tag, 0, 100);
+    }
+
+    // The arcade's door: its chip tune for half a minute, heard through the door, or shut again.
+    // With the sound off the door only lights for a moment.
+    function toggleArcade(t) {
+        if (player && player.tunePlaying() === "arcade") { player.stopTune(); return; }
+        var heard = !!player && player.playTune("arcade", 30, function () { arcadeOpenUntil = 0; });
+        arcadeOpenUntil = t + (heard ? 30 : 3);
     }
 
     function useProp(p, t) {
@@ -1544,6 +1573,7 @@
                 return;
             }
         }
+        if (S.arcade && Math.abs(x - (S.arcade.x + S.arcade.w / 2)) <= 24 * K && y < S.gy && y > S.gy - 68 * K) { toggleArcade(t); return; }
         for (i = 0; i < S.props.length; i++) {
             p = S.props[i]; box = PROP_BOX[p.kind];
             if (Math.abs(x - p.x) <= Math.max(12, box[0] * K) && y < S.gy + 4 && y > S.gy - box[1] * K - 4) {
@@ -1602,6 +1632,30 @@
             updateHeat(t, dt, frame(t, dt));
         };
         requestAnimationFrame(loop);
+    }
+
+    // Keystone's motto on its card rings the support line: the hold music and the lines that go with
+    // it for twenty seconds, then the card is as it was. With the sound off the lines still show.
+    var holdTag = document.querySelector(".card-keystone .card-tag"), holdText = holdTag ? holdTag.textContent : "", holdTimers = [];
+    function endHold() {
+        holdTimers.forEach(clearTimeout);
+        holdTimers = [];
+        holdTag.textContent = holdText;
+        holdTag.classList.remove("holding");
+    }
+    if (holdTag) {
+        holdTag.addEventListener("click", function () {
+            if (holdTag.classList.contains("holding")) {
+                if (player && player.tunePlaying() === "hold") player.stopTune(); else endHold();
+                return;
+            }
+            var lines = ["Please hold. You are caller " + (50 + Math.floor(Math.random() * 15)) + ".", "Your call is important to us.",
+                "Your call may be recorded to improve your experience.", "Your call is very important to us."];
+            var heard = !!player && player.playTune("hold", 20, endHold);
+            holdTag.classList.add("holding");
+            lines.forEach(function (l, i) { holdTimers.push(setTimeout(function () { holdTag.textContent = l; }, i * 5000)); });
+            if (!heard) holdTimers.push(setTimeout(endHold, 20000));
+        });
     }
 
     // The footer hangs up; a click on it dials in again.

@@ -325,6 +325,7 @@ a:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
 /* Each in its own colours from the game: Keystone's red, Overwatch's grey. */
 .card-keystone { border-color: rgba(196, 18, 48, 0.55); }
 .card-keystone h2 { color: #E0203F; }
+.card-keystone .card-tag.holding { color: #E0203F; }
 .card-overwatch { border-color: rgba(110, 110, 110, 0.7); }
 .card-overwatch h2 { color: var(--text); }
 .card-nullgrid h2 { color: var(--cyan); }
