@@ -196,12 +196,13 @@ a:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
 @keyframes blink { 50% { opacity: 0; } }
 
 .wordmark {
-  /* As wide as its own text, so the reveal's clip never cuts the title short. */
+  /* As wide as its own text or canvas, so the reveal's clip never cuts the title short. */
+  position: relative;
   width: max-content;
   margin-top: 10px;
   font-family: var(--display);
   font-weight: 700;
-  font-size: clamp(2.1rem, min(9.5vw, 12.5vh), 7rem);
+  font-size: clamp(2.1rem, min(8.5vw, 11vh), 5.5rem);
   line-height: 1.05;
   letter-spacing: 0.03em;
   color: #EAFBFF;
@@ -210,6 +211,19 @@ a:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
   /* Negative insets leave room for the glow. */
   clip-path: inset(-0.4em);
   transition: clip-path 0.7s steps(14);
+}
+
+.wordmark-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+.wordmark-canvas {
+  display: block;
 }
 
 .tagline {
@@ -368,6 +382,8 @@ a:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
   color: var(--text-dim);
 }
 
+.foot-end { cursor: pointer; }
+
 @media (max-width: 640px) {
   .cards { grid-template-columns: 1fr; }
   .status { display: none; }
@@ -397,4 +413,5 @@ a:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
   .wordmark, .tagline, .blurb, .genre { transition: none; }
   .boot .cursor { animation: none; }
   .hud { display: none; }
+  .foot-end { cursor: auto; }
 }

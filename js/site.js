@@ -68,6 +68,113 @@
     var S = null;           // layout of the current scene
     var rain = [];
     var copyEl = document.querySelector(".hero-copy"), barEl = document.querySelector(".bar"), copySig = "";
+    var wordmarkEl = document.getElementById("wordmark") || document.querySelector(".wordmark");
+    var wordmarkCanvas = null, wordmarkScale = 0;
+
+    // ─── The [MODE-ZERO] wordmark (title_wordmark.js) ──────────────────────
+    // Tall, condensed letters on a 10-unit cap height, drawn as hollow neon tubes (a wide stroke
+    // with a narrower one cut out of its middle), the brackets in pink standing proud of the
+    // letters, and the hyphen a short bar in the brackets' colour.
+    var WORDMARK = {
+        text: "[MODE-ZERO]",
+        gap: 2.5, chamfer: 1.3, bracketW: 2.3, bracketOver: 1.3, hyphenW: 3.4, hyphenY: 5.2,
+        letterW: 6, tube: 1.45, bore: 0.62,
+        nameCol: "#00DFFF", punctCol: "#FF1493", nameGlow: 10, punctGlow: 6
+    };
+    function wordmarkGlyph(ch, lw) {
+        var c = WORDMARK.chamfer, b = WORDMARK.bracketW, o = WORDMARK.bracketOver;
+        switch (ch) {
+            case "M": return [[[0, 10], [0, 0], [lw / 2, 4.6], [lw, 0], [lw, 10]]];
+            case "O": return [[[c, 0], [lw - c, 0], [lw, c], [lw, 10 - c], [lw - c, 10], [c, 10], [0, 10 - c], [0, c], "z"]];
+            case "D": return [[[0, 0], [lw - c * 1.3, 0], [lw, c * 1.3], [lw, 10 - c * 1.3], [lw - c * 1.3, 10], [0, 10], "z"]];
+            case "E": return [[[lw, 0], [0, 0], [0, 10], [lw, 10]], [[0, 5], [lw * 0.72, 5]]];
+            case "Z": return [[[0, 0], [lw, 0], [0, 10], [lw, 10]]];
+            case "R": { var leg = [[lw * 0.42, 5], [lw, 10]]; leg.butt = true; return [[[0, 10], [0, 0], [lw - c, 0], [lw, c], [lw, 5 - c], [lw - c, 5], [0, 5]], leg]; }
+            case "[": return [[[b, -o], [0, -o], [0, 10 + o], [b, 10 + o]]];
+            case "]": return [[[0, -o], [b, -o], [b, 10 + o], [0, 10 + o]]];
+            case "-": return [[[0, WORDMARK.hyphenY], [WORDMARK.hyphenW, WORDMARK.hyphenY]]];
+        }
+        return [];
+    }
+    function wordmarkLayout() {
+        var parts = [], x = 0, s = WORDMARK.text, lw = WORDMARK.letterW;
+        for (var i = 0; i < s.length; i++) {
+            var ch = s.charAt(i), w = (ch === "[" || ch === "]") ? WORDMARK.bracketW : ch === "-" ? WORDMARK.hyphenW : lw;
+            if (i > 0) x += WORDMARK.gap;
+            parts.push({ ch: ch, x: x, w: w, punct: ch === "[" || ch === "]" || ch === "-" });
+            x += w;
+        }
+        return { parts: parts, w: x, letterW: lw };
+    }
+    function wordmarkPath(c, lines, ox, s, pad, ext) {
+        c.beginPath();
+        for (var i = 0; i < lines.length; i++) {
+            var pl = lines[i];
+            for (var j = 0; j < pl.length; j++) {
+                if (pl[j] === "z") { c.closePath(); continue; }
+                var qx = pl[j][0], qy = pl[j][1];
+                if (pl.butt && j === pl.length - 1 && j > 0) {
+                    var dx = qx - pl[j - 1][0], dy = qy - pl[j - 1][1], dl = Math.sqrt(dx * dx + dy * dy) || 1;
+                    qx += dx / dl * (ext || 0); qy += dy / dl * (ext || 0);
+                }
+                var px = pad + (ox + qx) * s, py = pad + (qy + WORDMARK.bracketOver) * s;
+                if (j === 0) c.moveTo(px, py); else c.lineTo(px, py);
+            }
+        }
+    }
+    function drawWordmark() {
+        if (!wordmarkEl) return;
+        if (!wordmarkCanvas) {
+            var sr = document.createElement("span");
+            sr.className = "wordmark-sr";
+            sr.textContent = wordmarkEl.textContent || WORDMARK.text;
+            wordmarkCanvas = document.createElement("canvas");
+            wordmarkCanvas.className = "wordmark-canvas";
+            wordmarkCanvas.setAttribute("aria-hidden", "true");
+            wordmarkEl.textContent = "";
+            wordmarkEl.appendChild(sr);
+            wordmarkEl.appendChild(wordmarkCanvas);
+        }
+        var lay = wordmarkLayout();
+        var capH = parseFloat(window.getComputedStyle(wordmarkEl).fontSize) || 64;
+        var padL = copyEl ? (parseFloat(window.getComputedStyle(copyEl).paddingLeft) || 24) : 24;
+        var maxW = Math.max(160, W - padL * 2);
+        var sCss = Math.min(capH / 10, maxW / lay.w), s = sCss * DPR;
+        if (Math.abs(s - wordmarkScale) < 0.001) return;
+        wordmarkScale = s;
+        var padCss = Math.ceil(WORDMARK.tube * sCss + 12), pad = padCss * DPR;
+        var wCss = Math.ceil(lay.w * sCss), hCss = Math.ceil((10 + WORDMARK.bracketOver * 2) * sCss);
+        var cw = Math.ceil((wCss + padCss * 2) * DPR), ch = Math.ceil((hCss + padCss * 2) * DPR);
+        wordmarkCanvas.width = cw;
+        wordmarkCanvas.height = ch;
+        wordmarkCanvas.style.width = (wCss + padCss * 2) + "px";
+        wordmarkCanvas.style.height = (hCss + padCss * 2) + "px";
+        wordmarkCanvas.style.margin = (-padCss) + "px";
+        var wc = wordmarkCanvas.getContext("2d");
+        [[true, WORDMARK.punctCol, WORDMARK.punctGlow], [false, WORDMARK.nameCol, WORDMARK.nameGlow]].forEach(function (group) {
+            var sp = document.createElement("canvas");
+            sp.width = cw; sp.height = ch;
+            var sc = sp.getContext("2d");
+            sc.lineJoin = "miter"; sc.miterLimit = 2.2; sc.lineCap = "square"; sc.strokeStyle = group[1];
+            [[WORDMARK.tube, "source-over"], [WORDMARK.bore, "destination-out"]].forEach(function (pass) {
+                sc.globalCompositeOperation = pass[1];
+                sc.lineWidth = Math.max(1.5, pass[0] * s);
+                lay.parts.forEach(function (p) {
+                    if (p.punct !== group[0]) return;
+                    var g = wordmarkGlyph(p.ch, lay.letterW);
+                    var sq = g.filter(function (l) { return !l.butt; }), bt = g.filter(function (l) { return l.butt; });
+                    sc.lineCap = "square"; wordmarkPath(sc, sq, p.x, s, pad, 0); sc.stroke();
+                    if (bt.length) { sc.lineCap = "butt"; wordmarkPath(sc, bt, p.x, s, pad, pass[0] / 2); sc.stroke(); }
+                });
+            });
+            wc.globalAlpha = 1;
+            wc.shadowColor = group[1]; wc.shadowBlur = group[2] * DPR;
+            wc.drawImage(sp, 0, 0);
+            wc.shadowBlur = 0; wc.globalAlpha = 0.85;
+            wc.drawImage(sp, 0, 0);
+        });
+        wc.globalAlpha = 1;
+    }
 
     // Where the words are, relative to the canvas: one box per line of copy.
     function copyBoxes(r) {
@@ -192,6 +299,7 @@
         K = clamp(Math.min(W / 1100, H / 760), 0.62, 1.05);
         canvas.width = Math.round(W * DPR);
         canvas.height = Math.round(H * DPR);
+        drawWordmark();
 
         var rand = rng(8086);
         var gy = H - Math.round(86 * K);
@@ -715,7 +823,7 @@
             drawCabinet(c, doors, pals[(seed * 7 + 3) % pals.length]);
         },
         // the comms mast: a bolted foot, a tubular mast with a strip of the building's light up it, guyed
-        // to the deck, carrying one of three sets of aerials, and a steady red light at its top
+        // to the deck, carrying sector panels, relay drums or a ring emitter, and a steady red light at its top
         beacon: function (c, hex, seed) {
             var top = -92, v = seed % 3, col = rgba(hex, 0.9), lampY = top - 5;
             c.strokeStyle = GEAR.seam; c.lineWidth = 1;
@@ -731,15 +839,13 @@
             c.fillStyle = GEAR.hi; c.fillRect(-3, top, 1, 80);
             c.fillStyle = col; c.shadowColor = col; c.shadowBlur = 3; c.fillRect(-0.5, top + 6, 1.5, 68); c.shadowBlur = 0;
             c.fillStyle = GEAR.steel3; c.fillRect(-4, -44, 8, 3); c.fillRect(-4, top + 2, 8, 3);
-            if (v === 0) {                                                                              // sector panels either side, and a whip
+            if (v === 0) {                                                                              // sector panels either side
                 [[-14, 8], [8, 14]].forEach(function (p) {
                     var px = p[0], py = top + p[1];
                     c.fillStyle = GEAR.steel; c.fillRect(px, py, 6, 30);
                     c.strokeStyle = GEAR.hi; c.lineWidth = 1; c.strokeRect(px + 0.5, py + 0.5, 5, 29);
                     c.fillStyle = rgba(hex, 0.6); c.fillRect(px + 2, py + 3, 2, 24);
                 });
-                c.strokeStyle = GEAR.hi; c.lineWidth = 1; line(c, 0.5, top, 0.5, top - 20);
-                lampY = top - 24;
             } else if (v === 1) {                                                                       // two relay drums, side on
                 [[1, 12, 1], [-1, 40, 0.8]].forEach(function (d) {
                     var dw = Math.round(12 * d[2]), dh = Math.round(22 * d[2]), x0 = d[0] > 0 ? 8 : -8 - dw, y0 = top + d[1];
@@ -747,12 +853,15 @@
                     c.strokeStyle = GEAR.hi; c.lineWidth = 1; c.strokeRect(x0 + 0.5, y0 + 0.5, dw - 1, dh - 1);
                     c.fillStyle = rgba(hex, 0.7); c.fillRect(d[0] > 0 ? x0 + dw - 2 : x0, y0, 2, dh);
                 });
-            } else {                                                                                    // a cross-arm of whips, and a junction box
-                c.strokeStyle = GEAR.hi; c.lineWidth = 1;
-                strokePath(c, [-12.5, top + 6, -12.5, top - 20, 0.5, top + 6, 0.5, top - 28, 12.5, top + 6, 12.5, top - 12]);
+            } else {                                                                                    // an octagonal emitter ring, and a junction box
+                var rg = 11, ry0 = top - 2 * rg + 2;
+                pPoly(c, [-5, ry0, 5, ry0, rg, ry0 + 6, rg, ry0 + 16, 5, ry0 + 22, -5, ry0 + 22, -rg, ry0 + 16, -rg, ry0 + 6], GEAR.hi, null, 1.5);
+                c.shadowColor = col; c.shadowBlur = 3;
+                pPoly(c, [-3, ry0 + 4, 3, ry0 + 4, rg - 4, ry0 + 8, rg - 4, ry0 + 14, 3, ry0 + 18, -3, ry0 + 18, 4 - rg, ry0 + 14, 4 - rg, ry0 + 8], col, null, 1.2);
+                c.shadowBlur = 0;
                 gearSteel(c, -6, -36, 12, 14);
                 gearLamp(c, -2, -31, GEAR.ok, 2);
-                lampY = top - 32;
+                lampY = ry0 - 6;
             }
             gearLamp(c, -2, lampY, GEAR.red, 4);
         },
@@ -1220,42 +1329,89 @@
     }
 
     // ─── The Overwatch patrol drone ────────────────────────────────────────
-    // The game's patrol drone (_cityDrawPatrolDrone): a heavy wing bar with angular hardpoints, a hex
-    // hull, one red eye and a survey beam. It comes in from one side, crosses and leaves.
+    // The game's patrol drone (_cityDrawPatrolDrone): a flat spar with a lift pod at each end, a tail
+    // fin, a hull slung under the spar, one red eye and a survey beam. Clicking it sprays its eye
+    // (_cityDrawEyePaint), blinding its beam and setting it rocking as it flies on.
+    function owPoly(c, pts) {
+        pPath(c, pts, true);
+        c.fill(); c.stroke();
+    }
+    function owPod(c, x, y, w, h) {
+        owPoly(c, [x - w / 2, y, x + w / 2, y, x + w / 2, y + h - 3, x + w / 2 - 3, y + h, x - w / 2 + 3, y + h, x - w / 2, y + h - 3]);
+        c.fillStyle = "rgba(255,255,255,0.22)"; c.fillRect(x - w / 2 + 2, y + 2, w - 4, 0.8); c.fillRect(x - w / 2 + 2, y + 4, w - 4, 0.8);
+        c.fillStyle = "rgba(210,220,235,0.75)"; c.fillRect(x - w / 2 + 3, y + h, w - 6, 1.2);
+        c.fillStyle = "rgba(210,220,235,0.10)";
+        pPath(c, [x - w / 2 + 3, y + h + 1, x + w / 2 - 3, y + h + 1, x + w / 2, y + h + 7, x - w / 2, y + h + 7], true); c.fill();
+        c.fillStyle = "#000000";
+    }
+    function drawEyePaint(c, color) {
+        c.save();
+        c.fillStyle = color; c.strokeStyle = color;
+        c.globalAlpha = 0.9;
+        pPath(c, [-6.8, -0.4, -5.9, -4.6, -3.1, -6.3, -1.2, -5.2, 1.6, -6.8, 4.4, -4.9, 4.9, -2.1, 3.1, -0.6, 3.6, 1.4, 1.2, 2.2, -0.9, 4.6, -3.6, 3.8, -5.2, 4.4, -6.1, 2.1], true);
+        c.fill();
+        c.globalAlpha = 0.45;
+        pPath(c, [-2.4, -2.8, 3.9, -3.6, 5.6, 0.6, 2.2, 3.1, -1.8, 1.9], true);
+        c.fill();
+        c.globalAlpha = 0.6; c.lineWidth = 1.3; c.lineCap = "round";
+        pPath(c, [-7.8, -3.4, -3, -5.1, 6.9, -6.3], false); c.stroke();
+        c.globalAlpha = 0.85;
+        c.fillRect(-4.6, 3.6, 1.3, 6.4);
+        c.fillRect(-1.6, 4, 0.7, 2.1);
+        c.fillRect(2.4, 1.8, 0.9, 3.9);
+        c.beginPath(); c.arc(-3.95, 10.1, 0.95, 0, Math.PI * 2); c.arc(2.85, 5.8, 0.6, 0, Math.PI * 2); c.fill();
+        c.globalAlpha = 0.45;
+        c.fillRect(-8.6, 0.8, 0.9, 0.9); c.fillRect(-7.4, -6.2, 0.7, 0.7); c.fillRect(6.3, -3.4, 0.8, 0.8);
+        c.fillRect(0.4, -8.4, 0.9, 0.9); c.fillRect(-2.2, 6.3, 0.6, 0.6); c.fillRect(7.6, -7.1, 0.6, 0.6);
+        c.restore();
+    }
     function drawPatrol(t) {
         if (!patrol) return;
         var c = ctx, col = PATROL.col, pulse = 0.5 + Math.sin(t * 3) * 0.5, eye = 0.6 + 0.4 * Math.sin(t * 3);
         c.save();
         c.translate(patrol.x, patrol.y);
+        if (patrol.paint) c.rotate(Math.sin(t * 2.8) * 0.14);
         c.scale(patrol.dir * PATROL.scale * K, PATROL.scale * K);
-        var g = c.createLinearGradient(0, 8, 0, 112);
-        g.addColorStop(0, "rgba(255,0,0," + (0.18 * pulse).toFixed(3) + ")");
-        g.addColorStop(1, "rgba(255,0,0,0)");
-        c.fillStyle = g;
-        c.beginPath(); c.moveTo(-5, 8); c.lineTo(5, 8); c.lineTo(30, 112); c.lineTo(-30, 112); c.closePath(); c.fill();
-        c.strokeStyle = col; c.lineWidth = 2.4;
-        line(c, -30, -3, 30, -3);
-        c.fillStyle = "#000000"; c.lineWidth = 1.3;
-        [-30, 30].forEach(function (rx) {
-            c.beginPath(); c.moveTo(rx - 8, -3); c.lineTo(rx, -10); c.lineTo(rx + 8, -3); c.lineTo(rx, 5); c.closePath();
-            c.fill(); c.stroke();
-        });
-        c.beginPath();
-        c.moveTo(-21, 0); c.lineTo(-12, -8); c.lineTo(12, -8); c.lineTo(21, 0); c.lineTo(12, 8); c.lineTo(-12, 8); c.closePath();
-        c.fill(); c.stroke();
-        c.fillStyle = "rgba(255,255,255,0.04)";
-        c.beginPath(); c.moveTo(-12, -8); c.lineTo(12, -8); c.lineTo(8, -3); c.lineTo(-8, -3); c.closePath(); c.fill();
-        c.strokeStyle = "rgba(255,255,255,0.18)"; c.lineWidth = 1;
-        line(c, -12, -8, 12, -8);
-        c.fillStyle = "rgba(255,0,0," + eye.toFixed(2) + ")"; c.shadowBlur = 14 * DPR; c.shadowColor = "#FF0000";
-        c.beginPath(); c.arc(0, 0, 5, 0, Math.PI * 2); c.fill();
+        if (!patrol.paint) {
+            var g = c.createLinearGradient(0, 8, 0, 112);
+            g.addColorStop(0, "rgba(255,0,0," + (0.18 * pulse).toFixed(3) + ")");
+            g.addColorStop(1, "rgba(255,0,0,0)");
+            c.fillStyle = g;
+            c.beginPath(); c.moveTo(-5, 8); c.lineTo(5, 8); c.lineTo(30, 112); c.lineTo(-30, 112); c.closePath(); c.fill();
+        }
+        c.fillStyle = "#000000"; c.strokeStyle = col; c.lineWidth = 1.3; c.lineJoin = "miter";
+        owPod(c, -31, -7, 16, 10);
+        owPod(c, 31, -7, 16, 10);
+        owPoly(c, [-25, -8, -33, -19, -28, -19, -17, -8]);
+        line(c, 13, -8, 13, -16);
+        c.fillStyle = col; c.fillRect(12, -18, 2, 2); c.fillStyle = "#000000";
+        c.shadowBlur = 2 * DPR; c.shadowColor = col;
+        owPoly(c, [-21, -5, 21, -5, 24, 0, 16, 9, -16, 9, -24, 0]);
         c.shadowBlur = 0;
-        c.strokeStyle = "rgba(255,40,40,0.9)";
-        c.beginPath(); c.arc(0, 0, 5, 0, Math.PI * 2); c.stroke();
-        c.strokeStyle = col; c.lineWidth = 1.3;
-        line(c, 0, 8, 0, 13);
-        c.fillStyle = "rgba(255,0,0," + (0.55 + 0.45 * pulse).toFixed(2) + ")";
-        c.beginPath(); c.arc(0, 14, 2.4, 0, Math.PI * 2); c.fill();
+        c.strokeStyle = "rgba(255,255,255,0.13)"; c.lineWidth = 1;
+        strokePath(c, [-10, -5, -10, 9, 10, -5, 10, 9]);
+        c.fillStyle = "rgba(255,255,255,0.14)"; c.fillRect(-19, -2, 6, 0.8); c.fillRect(-19, 1, 6, 0.8); c.fillRect(-18, 4, 5, 0.8);
+        c.fillStyle = "#000000"; c.strokeStyle = col; c.lineWidth = 1.3;
+        c.fillRect(-25, -8, 50, 3); c.strokeRect(-25, -8, 50, 3);
+        c.fillStyle = "rgba(255,255,255,0.30)"; c.fillRect(-24, -8, 48, 0.8);
+        c.fillStyle = "rgba(210,220,235,0.8)"; c.fillRect(-23, -6.6, 1.6, 1.2); c.fillRect(21.4, -6.6, 1.6, 1.2);
+        c.fillStyle = "#000000";
+        owPoly(c, [-5, 9, 5, 9, 3, 13, -3, 13]);
+        c.fillStyle = "#000000"; c.strokeStyle = col; c.lineWidth = 1;
+        c.beginPath(); c.arc(0, 0, 6.6, 0, Math.PI * 2); c.fill(); c.stroke();
+        if (patrol.paint) {
+            c.fillStyle = "rgba(255,0,0," + (0.45 + 0.25 * pulse).toFixed(2) + ")"; c.shadowBlur = 6 * DPR; c.shadowColor = "#FF0000";
+            c.beginPath(); c.arc(0, 0, 5, 0, Math.PI * 2); c.fill(); c.shadowBlur = 0;
+            drawEyePaint(c, patrol.paint);
+        } else {
+            c.fillStyle = "rgba(255,0,0," + eye.toFixed(2) + ")"; c.shadowBlur = 14 * DPR; c.shadowColor = "#FF0000";
+            c.beginPath(); c.arc(0, 0, 5, 0, Math.PI * 2); c.fill(); c.shadowBlur = 0;
+            c.strokeStyle = "rgba(255,40,40,0.9)"; c.lineWidth = 1;
+            c.beginPath(); c.arc(0, 0, 5, 0, Math.PI * 2); c.stroke();
+            c.fillStyle = "rgba(255,255,255," + (0.5 * eye).toFixed(2) + ")"; c.fillRect(1.2, -2.6, 1.6, 1.6);
+        }
+        c.fillStyle = "rgba(255,0,0," + (0.55 + 0.45 * pulse).toFixed(2) + ")"; c.shadowBlur = 8 * DPR; c.shadowColor = "#FF0000";
+        c.beginPath(); c.arc(0, 14, 2.4, 0, Math.PI * 2); c.fill(); c.shadowBlur = 0;
         c.restore();
     }
     function updatePatrol(t, dt) {
@@ -1556,16 +1712,25 @@
         ctx.restore();
     }
 
+    // The companion drone (drone_cosmetics.js): a round core with a green eye and a lift pod on each arm.
     function drawDrone() {
-        ctx.save();
-        ctx.strokeStyle = "#19d3ff";
-        ctx.lineWidth = 1.5;
-        ctx.beginPath(); ctx.arc(drone.x, drone.y, 6 * K, 0, Math.PI * 2); ctx.stroke();
-        line(ctx, drone.x - 13 * K, drone.y, drone.x - 7 * K, drone.y);
-        line(ctx, drone.x + 7 * K, drone.y, drone.x + 13 * K, drone.y);
-        ctx.fillStyle = "#39FF14";
-        ctx.beginPath(); ctx.arc(drone.x, drone.y, 2.5 * K, 0, Math.PI * 2); ctx.fill();
-        ctx.restore();
+        var c = ctx, x = drone.x, y = drone.y, col = "#19d3ff";
+        c.save();
+        c.strokeStyle = col; c.lineWidth = 1.5; c.lineJoin = "miter";
+        c.beginPath(); c.arc(x, y, 6 * K, 0, Math.PI * 2); c.stroke();
+        line(c, x - 13 * K, y, x - 7 * K, y);
+        line(c, x + 7 * K, y, x + 13 * K, y);
+        c.fillStyle = "#18122B"; c.lineWidth = Math.max(1, K);
+        [-1, 1].forEach(function (dir) {
+            var px = x + dir * 12 * K;
+            pPath(c, [px - 3 * K, y - 3 * K, px + 3 * K, y - 3 * K, px + 3 * K, y + 1.5 * K, px + 1.5 * K, y + 3 * K, px - 1.5 * K, y + 3 * K, px - 3 * K, y + 1.5 * K], true);
+            c.fill(); c.stroke();
+            c.fillStyle = col; c.fillRect(px - 1.5 * K, y + 3.4 * K, 3 * K, 0.9 * K);
+            c.fillStyle = "#18122B";
+        });
+        c.fillStyle = "#39FF14";
+        c.beginPath(); c.arc(x, y, 2.5 * K, 0, Math.PI * 2); c.fill();
+        c.restore();
     }
 
     // The scanner's pulse: a ring out from the operator, then a tag on whatever it reached.
@@ -1574,6 +1739,7 @@
             return { x: l.x + 26 * K, y: S.gy - LAMP.poleH * K, label: l.broken ? "STREETLIGHT // FAULT" : "STREETLIGHT // OK" };
         });
         if (S.cam) out.push({ x: S.cam.x, y: S.cam.y + 6 * K, label: camIsDown(t) ? "CAMERA // DISABLED" : "CAMERA // LIVE", red: true });
+        if (patrol) out.push({ x: patrol.x, y: patrol.y, label: patrol.paint ? "PATROL // BLINDED" : "PATROL // LIVE", red: true });
         return out;
     }
 
@@ -1644,8 +1810,8 @@
     }
 
     function updateHeat(t, dt, cone) {
-        // seen in the camera's cone, or under the patrol drone's beam
-        seen = (!!cone && op.x > cone.x1 && op.x < cone.x2) || (!!patrol && Math.abs(op.x - patrol.x) < PATROL.beam * K);
+        // seen in the camera's cone, or under the patrol drone's beam (unless its eye has been painted over)
+        seen = (!!cone && op.x > cone.x1 && op.x < cone.x2) || (!!patrol && !patrol.paint && Math.abs(op.x - patrol.x) < PATROL.beam * K);
         tags.forEach(function (g) { if (seen && t - g.t0 < TAG_TIME) g.seen = true; });
         if (seen) { heat += HEAT.rise * dt; lastSeen = t; }
         else if (t - lastSeen > HEAT.grace) heat -= HEAT.fall * dt;
@@ -1654,7 +1820,10 @@
         if (shown !== lastHud && hudEl && heatFill) {
             lastHud = shown;
             heatFill.style.width = Math.round(heat) + "%";
-            if (player) player.setTension(0.2 + heat / 100 * 0.6);
+            if (player) {
+                player.setTension(0.2 + heat / 100 * 0.6);
+                player.setHeat(heat, seen);
+            }
             hudEl.classList.toggle("seen", seen);
         }
     }
@@ -1711,9 +1880,10 @@
     // ─── Things that answer a click ────────────────────────────────────────
     // Nothing marks them (the game's rule for secrets). The operator changes colour, and the page's
     // edge with it; the drone pulses the scanner; the camera burns out for a while, or comes back;
-    // a streetlight breaks or is mended; a bare wall takes a tag; the vending machine drops a can, a
-    // bin can be rummaged, the hydrant sprays and a tree shakes. The arcade's door lets its tune out,
-    // and the comm booth rings Keystone, who put you on hold.
+    // the patrol drone's eye can be spray-painted shut; a streetlight breaks or is mended; a bare
+    // wall takes a tag; the vending machine drops a can, a bin can be rummaged, the hydrant sprays
+    // and a tree shakes. The arcade's door lets its tune out, and the comm booth rings Keystone,
+    // who put you on hold.
     function setOperatorColour(i) {
         op.colour = i % OP_COLOURS.length;
         var root = document.documentElement.style;
@@ -1792,9 +1962,14 @@
         var pad = Math.max(16, 16 * K);
         if (near(x, y, op.x, S.gy - OP.h * K / 2, Math.max(pad, OP.h * K / 2 + 4))) { setOperatorColour(op.colour + 1); sfx(660, 990, 0.09); return; }
         if (near(x, y, drone.x, drone.y, pad + 4)) { scan = { t0: t, x: op.x, y: S.gy - OP.h * K / 2 }; sfx(420, 1680, 0.5, "sine"); return; }
+        if (patrol && Math.abs(x - patrol.x) <= 58 * K && Math.abs(y - patrol.y) <= 26 * K) {
+            patrol.paint = OP_COLOURS[op.colour];
+            hiss(0.5, "highpass", 3600, 0.1);
+            return;
+        }
         if (S.cam && near(x, y, S.cam.x, S.cam.y + 4 * K, pad)) {
             if (camIsDown(t)) { camDownUntil = 0; sfx(330, 660, 0.12); }
-            else { camDownUntil = t + CAM.downFor; sfx(520, 70, 0.3, "sawtooth"); if (seen) heat = clamp(heat + HEAT.cam, 0, 100); }
+            else { camDownUntil = t + CAM.downFor; sfx(520, 70, 0.3, "triangle"); if (seen) heat = clamp(heat + HEAT.cam, 0, 100); }
             return;
         }
         for (i = 0; i < S.lamps.length; i++) {
@@ -1854,16 +2029,26 @@
         hero.addEventListener("pointerleave", function () { pointerIn = false; });
         canvas.addEventListener("click", onClick);
 
-        var last = 0;
+        var last = 0, rafId = 0, heroVisible = true;
         var loop = function (ms) {
-            requestAnimationFrame(loop);
+            if (!heroVisible) { rafId = 0; return; }
+            rafId = requestAnimationFrame(loop);
             var t = ms / 1000, dt = Math.min(0.05, last ? t - last : 0);
             last = t;
             clock = t;
             update(t, dt);
             updateHeat(t, dt, frame(t, dt));
         };
-        requestAnimationFrame(loop);
+        if (window.IntersectionObserver && hero) {
+            new IntersectionObserver(function (entries) {
+                heroVisible = entries[0].isIntersecting;
+                if (heroVisible && !rafId) {
+                    last = 0;
+                    rafId = requestAnimationFrame(loop);
+                }
+            }).observe(hero);
+        }
+        rafId = requestAnimationFrame(loop);
     }
 
     // The footer hangs up; a click on it dials in again.

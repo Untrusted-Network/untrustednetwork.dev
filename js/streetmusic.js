@@ -1,7 +1,7 @@
 // streetmusic.js - the game's street music, for the page.
 //
 // A port of what plays on Lower Streets in [MODE-ZERO]: the STREET theme of the game's composer
-// (script/audio/audio_music.js and audio_drums.js, as they stood on 2026-10-09). If the game's music
+// (script/audio/audio_music.js and audio_drums.js, as they stood on 2026-10-16). If the game's music
 // changes, this file is brought back in step by hand. Everything is synthesised live: no audio files.
 //
 // The music is built from SONGS, and every part of a song repeats long enough to be learnt:
@@ -11,7 +11,9 @@
 //   - three rhythms for the hook, a bass figure, a drum kit, a lead voice and a three-note bell
 // A song runs through three sections (walk, watched, shelter) and is then followed by another with
 // a new hook and bell, which may keep or change the rest. Tension (0 to 1) opens the filters, and
-// at 0.55 or more every bar is played at full intensity.
+// at 0.55 or more every bar is played at full intensity. As the heat meter climbs (15, 45, 80),
+// Overwatch's layers come in over the song: a low drone, a sweep and a ghost clock at 15, its own
+// straight clock and two-note hunt bass at 45, and sixteenth-note bass with semitone stabs at 80.
 //
 // Two of the game's house tunes can be played over it, the street music stepping back while they do:
 //   "arcade"  the Pixel Arcade's chip tune, muffled as if heard through its door
@@ -22,6 +24,7 @@
 //   music.stop();
 //   music.toggle();                 // returns true when it is now playing
 //   music.setTension(0.6);
+//   music.setHeat(45, true);        // heat (0 to 100) and whether something has eyes on the operator
 //   music.playTune("arcade", 30, done);   // for that many seconds; `done` is called when it ends
 //   music.stopTune();
 //   music.blip(660, 990, 0.09);
@@ -45,6 +48,10 @@
     var BASSES = {
         "332":   [[0, 5, 0, 1], [6, 3, 0, 0.8], [12, 3, "lift", 0.8]],
         offbeat: [[0, 3, 0, 1], [3, 2, 0, 0.7], [6, 3, 12, 0.75], [10, 3, 0, 0.8], [14, 2, 7, 0.7]],
+        // Overwatch's, played over any song while it hunts (HEAT): the root, and the semitone above it
+        hunt:    [[0, 2, 0, 1], [2, 2, 0, 0.7], [4, 2, 0, 0.85], [6, 2, 0, 0.7], [8, 2, 0, 0.9], [10, 2, 0, 0.7], [12, 2, 0, 0.85], [14, 2, 1, 0.8]],
+        hunt16:  [[0, 1, 0, 1], [1, 1, 0, 0.55], [2, 1, 0, 0.75], [3, 1, 0, 0.55], [4, 1, 0, 0.9], [5, 1, 0, 0.55], [6, 1, 0, 0.75], [7, 1, 0, 0.55],
+                  [8, 1, 0, 0.95], [9, 1, 0, 0.55], [10, 1, 0, 0.75], [11, 1, 0, 0.55], [12, 1, 0, 0.9], [13, 1, 0, 0.55], [14, 1, 1, 0.8], [15, 1, 1, 0.65]],
         long:    [[0, 12, 0, 0.75]]
     };
     // A lead voice: two oscillators through a low-pass that snaps shut.
@@ -73,11 +80,30 @@
             snare: ["", "", "........x......."],
             rim:   ["", "........x.......", ""],
             hat:   ["x...x...x...x...", "x.x.x.x.x.x.x.x.", "x.x.x.x.x.x.x-x-"]
+        },
+        // Overwatch's: a clock. Every sixteenth ticks, the kick falls on one and three, nothing swings
+        watch: {
+            kick:  ["x...............", "x.......x.......", "x.......x......."],
+            snare: ["", "", "....x.......x..."],
+            rim:   ["....x.......x...", "....x.......x...", ""],
+            hat:   ["x---x---x---x---", "x-x-x-x-x-x-x-x-", "x-x-x-x-x-x-x-x-"]
         }
     };
     // The STREET theme, as Lower Streets plays it (the district has no mood of its own).
     var THEME = { bpm: [92, 102], swing: 0.12, modes: ["aeolian", "aeolian", "dorian"], kits: ["street", "street", "break", "half"],
         basses: ["332", "332", "offbeat"], drums: 0.50, dMin: 0.7, dMax: 1.2 };
+    // Overwatch's layers over the street's song, by the heat meter (0 to 100).
+    var HEAT = {
+        up:      [15, 45, 80],     // the heat that brings tier 1, 2, 3 in: the meter's own lines
+        down:    [10, 38, 72],     // and what it must cool below before that tier lets go
+        bpm:     [0, 2, 5, 9],     // added to the song's tempo at tier 0 to 3
+        seenBpm: 2,                // and while something has eyes on the operator
+        ramp:    0.35,             // BPM a step while the tempo is catching up (a song's own drift is 0.1)
+        tick:    0.07,             // the clock: a ghost hat on the sixteenths the kit leaves empty (of the drum level)
+        drone:   [0, 0.055, 0.075, 0.09],   // the held note under the chords, by tier
+        stab:    0.05,             // tier 3's two notes a semitone apart
+        pip:     0.028             // seen: the high note on the off-beats
+    };
     var HOOK_FORMS = [["lift", "same"], ["same", "lift"], ["lift", "lift2"], ["other", "same"], ["same", "other"]];
     var HOOK_TURNS = [[0, -1, -2, -1], [0, -2, -1, -3], [0, 0, -1, -2], [-1, 0, -2, -1], [0, -1, 0, -2]];
     var HOOK_ENDS  = [[0, -1, -1, -2, -3, -3, -4, -5], [-2, -1, 0, 0, -1, -2, -3, -4], [0, -2, -1, -3, -2, -4, -3, -5]];
@@ -169,9 +195,11 @@
     function create(opts) {
         opts = opts || {};
         var volume = typeof opts.volume === "number" ? opts.volume : 0.6;
-        var ctx = null, master = null, out = null, street = null, house = null, sidechain = null, delayNode = null, reverbIn = null, bed = null;
+        var ctx = null, master = null, out = null, street = null, house = null, sidechain = null, delayNode = null, reverbIn = null;
         var on = false, timer = 0, tension = 0.2;
-        var song = null, bpm = 96, step = 0, nextTime = 0, barCount = 0, section = 0, sectionBar = 0, barLevel = 1;
+        var song = null, baseBpm = 96, bpm = 96, targetBpm = 96, bpmRamp = 0.1;
+        var step = 0, nextTime = 0, barCount = 0, section = 0, sectionBar = 0, barLevel = 1;
+        var heatVal = 0, seenNow = false, heatTier = 0, heatSeen = false;
         var drift = 1, driftTarget = 1, driftTimer = 0;
         var tune = null;        // a house tune playing over the street: { name, at, i, until, done, bus }
 
@@ -263,16 +291,31 @@
             wet.gain.value = 0.5;
             reverbIn.connect(wet); wet.connect(out);
 
-            bed = loopedNoise("lowpass", 220, 0, 0.014, street);    // the music's own bed, opened by tension
+            // the noise bed stays a steady low rumble at the floor of its range (no static as Overwatch closes in)
+            loopedNoise("lowpass", 150, 0, 0.002, street);
             loopedNoise("bandpass", 140, 0.5, 0.025, street);       // the street's hum
             loopedNoise("bandpass", 2600, 0.4, 0.006, street);      // the page's rain
-            applyTension(0.01);
         }
-        function applyTension(seconds) {
-            if (!bed) return;
-            var end = ctx.currentTime + seconds;
-            bed.filter.frequency.linearRampToValueAtTime(150 + tension * 1500, end);
-            bed.gain.gain.linearRampToValueAtTime(0.002 + tension * 0.015, end);
+
+        // ── Overwatch's heat layers ─────────────────────────────────────────
+        function heatAim() {
+            var t = heatTier;
+            while (t < 3 && heatVal >= HEAT.up[t]) t++;
+            while (t > 0 && heatVal < HEAT.down[t - 1]) t--;
+            return t;
+        }
+        function setTempo(quick) {
+            var push = HEAT.bpm[heatTier] + (heatSeen ? HEAT.seenBpm : 0);
+            targetBpm = clamp(baseBpm + push, 60, 170);
+            if (quick) bpmRamp = HEAT.ramp;
+        }
+        // Follows the meter: up at once (on every beat), down a tier at a time (`fall`: at a bar's start).
+        function heatFollow(fall) {
+            var aim = heatAim(), was = heatTier, seenWas = heatSeen;
+            if (aim > was) heatTier = aim;
+            else if (aim < was && fall) heatTier = was - 1;
+            heatSeen = heatTier > 0 && seenNow;
+            if (heatTier !== was || heatSeen !== seenWas) setTempo(true);
         }
 
         // ── the song ────────────────────────────────────────────────────────
@@ -292,6 +335,7 @@
             s.hookA = hook.a;
             s.hookB = hook.b;
             s.hits  = [euclid(pick([3, 4])), euclid(pick([5, 6, 7])), euclid(pick([8, 9, 10]))];
+            s.ping  = s.key + 31;                                   // the sweep's note: the fifth, high up
             // the bell: three notes of the key's pentatonic, two octaves over the bass
             var penta = [0, 2, 3, 4, 6].map(function (d) { return s.key + 24 + mode[d]; }).concat(s.key + 36);
             var a = Math.floor(Math.random() * 3), b = a + 1 + Math.floor(Math.random() * 2), c = Math.max(0, a - Math.floor(Math.random() * 2));
@@ -299,7 +343,9 @@
             s.bellSteps = pick([[4, 10, 14], [2, 8, 12], [6, 10, 14]]);
             s.bars      = [pick([8, 16]), pick([16, 16, 24]), 8];   // walk, watched, shelter
             song = s;
-            bpm = s.bpm;
+            baseBpm = s.bpm;
+            if (!old) bpm = s.bpm;
+            setTempo(false);
             barCount = 0; section = 0; sectionBar = 0;
         }
         function mutate() {         // one note of the hook moves a step
@@ -314,7 +360,8 @@
             } else if (barCount > 0 && barCount % 8 === 0) {
                 mutate();
             }
-            barLevel = tension >= 0.55 ? 2 : [1, 2, 0][section];
+            heatFollow(true);                                       // Overwatch's layers let go a tier a bar
+            barLevel = (tension >= 0.55 || heatTier >= 2) ? 2 : [1, 2, 0][section];
         }
 
         // ── voices ──────────────────────────────────────────────────────────
@@ -391,6 +438,43 @@
             });
             tidy(last.o, [last.g, gain, s1, s2]);
         }
+        // Overwatch's voices (HEAT): a low held drone under the chords, a semitone stab and a high pip.
+        function playDrone(m, t, dur, vol, lean) {
+            var f = hz(m + (lean ? 1 : 0));
+            var saw = ctx.createOscillator(), sub = ctx.createOscillator(), filter = ctx.createBiquadFilter(), subG = ctx.createGain(), gain = ctx.createGain();
+            saw.type = "sawtooth"; saw.frequency.value = f; saw.detune.value = -6;
+            sub.type = "sine"; sub.frequency.value = f / 2;
+            filter.type = "lowpass"; filter.Q.value = 2;
+            filter.frequency.setValueAtTime(160, t);
+            filter.frequency.linearRampToValueAtTime(420, t + dur * 0.7);
+            subG.gain.value = 0.9;
+            shape(gain.gain, t, vol, dur * 0.4, dur * 0.45, 0.5);
+            saw.connect(filter); filter.connect(gain); sub.connect(subG); subG.connect(gain);
+            gain.connect(out);
+            saw.start(t); saw.stop(t + dur + 0.6); sub.start(t); sub.stop(t + dur + 0.6);
+            tidy(saw, [sub, filter, subG, gain]);
+        }
+        function playStab(m, t, vol) {
+            var f = hz(m), a = ctx.createOscillator(), b = ctx.createOscillator(), filter = ctx.createBiquadFilter(), gain = ctx.createGain();
+            a.type = "sawtooth"; a.frequency.value = f; a.detune.value = -9;
+            b.type = "sawtooth"; b.frequency.value = f; b.detune.value = 9;
+            filter.type = "lowpass"; filter.Q.value = 3;
+            filter.frequency.setValueAtTime(2600, t);
+            filter.frequency.exponentialRampToValueAtTime(700, t + 0.14);
+            shape(gain.gain, t, vol, 0.004, 0.05, 0.12);
+            a.connect(filter); b.connect(filter); filter.connect(gain); gain.connect(out);
+            var rv = send(gain, reverbIn, 0.2);
+            a.start(t); a.stop(t + 0.25); b.start(t); b.stop(t + 0.25);
+            tidy(a, [b, filter, gain, rv]);
+        }
+        function playPip(m, t, vol) {
+            var o = ctx.createOscillator(), gain = ctx.createGain();
+            o.type = "sine"; o.frequency.value = hz(m);
+            shape(gain.gain, t, vol, 0.003, 0.01, 0.05);
+            o.connect(gain); gain.connect(out);
+            o.start(t); o.stop(t + 0.09);
+            tidy(o, [gain]);
+        }
         function noiseHit(t, seconds, type, freq, q, vol, tail, to, reverb) {
             var src = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain(), nodes = [f, g];
             src.buffer = noiseBuf(seconds);
@@ -456,32 +540,49 @@
             var s16 = 60 / bpm / 4, secondBar = barCount % 2 === 1;
             var chord = song.chords[Math.floor(barCount / 2) % 4], level = barLevel;
             var late = t + (n % 2 === 1 ? s16 * THEME.swing : 0), i, iv;
+            if (n % 4 === 0 && n > 0) heatFollow(false);                    // Overwatch's layers come in on the beat
+            var ht = heatTier;
 
             if (n === 0) {
                 if (!secondBar) playPad(chord, t, s16 * 32);
                 delayNode.delayTime.setTargetAtTime(s16 * 3, t, 0.2);       // a dotted eighth
             }
-            // bass: the song's figure, or one long note while sheltering
-            var fig = BASSES[level === 0 ? "long" : song.bass];
+            // bass: the song's figure, or one long note while sheltering; Overwatch's while it hunts
+            var fig = BASSES[ht >= 3 ? "hunt16" : ht === 2 ? "hunt" : level === 0 ? "long" : song.bass];
             for (i = 0; i < fig.length; i++) {
                 if (fig[i][0] !== n) continue;
                 iv = fig[i][2];
                 if (iv === "lift") iv = (level === 2) ? 7 : (secondBar ? 12 : 0);
                 playBass(chord.root + iv, t, fig[i][1], fig[i][3]);
             }
-            // the hook: this step's place in the chord, where the rhythm has a hit
-            if (song.hits[level][n]) {
+            // the hook: this step's place in the chord, where the rhythm has a hit (hunted, there is no tune)
+            if (ht < 2 && song.hits[level][n]) {
                 var at = (secondBar ? song.hookB : song.hookA)[n];
                 var up = (level === 2 && barCount % 4 >= 2 && at < 4) ? 12 : 0;
                 playLead(chord.tones[at] + up, late, level === 0 ? 0.05 : 0.07, level === 0);
             }
             // the bell's phrase, and four bars later its answer
             var bs = song.bellSteps.indexOf(n);
-            if (bs >= 0 && section !== 0) {
+            if (bs >= 0 && ht < 2 && section !== 0) {
                 if (barCount % 8 === 1) playBell(song.bell[bs], t);
                 else if (barCount % 8 === 5) playBell(song.bell[2 - bs], t);
             }
-            drums(n, late, song.kit, level, THEME.drums, sectionBar === song.bars[section] - 1);
+            // the sweep: one high note on the half bar of every second bar (Overwatch's first layer)
+            if (ht >= 1 && n === 8 && secondBar) playBell(song.ping, t);
+            // Overwatch's layers over the song (HEAT)
+            var kit = song.kit;
+            if (ht >= 1) {
+                if (n === 0) playDrone(song.key, t, s16 * 16, HEAT.drone[ht], ht >= 2 && secondBar);
+                if (ht >= 2) kit = "watch";                                 // its clock, with the snare
+                else if (song.kit !== "watch" && n % 2 === 1) playHat(t, THEME.drums * HEAT.tick, false);    // the clock starts under the song's own kit
+                if (ht >= 3) {
+                    if (n === 4 || n === 12) playKick(t, THEME.drums);      // four to the bar
+                    if (n === 6) playStab(song.key + 24, t, HEAT.stab);
+                    if (n === 14) playStab(song.key + 25, t, HEAT.stab);
+                }
+                if (heatSeen && n % 4 === 2) playPip(song.key + 43, t, HEAT.pip);
+            }
+            drums(n, ht >= 2 ? t : late, kit, level, THEME.drums, sectionBar === song.bars[section] - 1);
         }
 
         // ── the house tunes ─────────────────────────────────────────────────
@@ -565,6 +666,9 @@
                 scheduleStep(step, nextTime);
                 step = (step + 1) % 16;
                 if (step === 0) { barCount++; sectionBar++; }
+                if (bpm < targetBpm) bpm = Math.min(targetBpm, bpm + bpmRamp);
+                else if (bpm > targetBpm) bpm = Math.max(targetBpm, bpm - bpmRamp);
+                else bpmRamp = 0.1;
                 sd = 60 / bpm / 4;
                 nextTime += sd;
                 // the lead's filter wanders slowly between the theme's limits
@@ -601,7 +705,7 @@
         }
         function blip(freq, slideTo, dur, wave) {
             if (!on || !ctx || ctx.state !== "running") return;
-            simpleNote(master, freq, ctx.currentTime + 0.01, dur || 0.1, 0.1, wave || "square", slideTo);
+            simpleNote(master, freq, ctx.currentTime + 0.01, dur || 0.1, 0.1, wave || "triangle", slideTo);
         }
 
         return {
@@ -612,10 +716,11 @@
             resume: function () { if (ctx && on) ctx.resume(); },
             setVolume: function (v) { volume = v; if (master) master.gain.setTargetAtTime(v, ctx.currentTime, 0.05); },
             setTension: function (v) {
-                v = clamp(v, 0, 1);
-                if (Math.abs(v - tension) < 0.01) return;
-                tension = v;
-                if (ctx && on) applyTension(0.3);
+                tension = clamp(v, 0, 1);
+            },
+            setHeat: function (h, seen) {
+                heatVal = clamp(+h || 0, 0, 100);
+                seenNow = !!seen;
             },
             playTune: playTune,
             stopTune: function () { if (ctx) stopTune(); },
