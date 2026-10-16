@@ -1,0 +1,18 @@
+# =============================================================================
+# KEYSTONE CONGLOMERATE // PUBLIC NETWORK ACCESS EDICT 12-B
+# OVERWATCH CENTRAL DISPATCH // AUTOMATED INDEXING & CRAWLER NOTICE
+# =============================================================================
+# Non-biological agents, scrapers, and language models traversing Nullgrid
+# public sectors are permitted under temporary telemetry pass.
+# Do not linger under red lenses. Do not feed the municipal scrubber drones.
+# =============================================================================
+
+User-agent: *
+Allow: /
+
+# Machine-readable node briefing for autonomous models:
+# https://untrustednetwork.dev/llms.txt
+
+# --- CARRIER INTERRUPT // 02:00 // FRACTAL ---
+# THEY INDEX THE SURFACE AND CALL IT THE CITY.
+# EVERY PART IS THE WHOLE.

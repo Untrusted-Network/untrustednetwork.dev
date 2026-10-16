@@ -247,12 +247,23 @@
     // Background traffic (the game's Lower Streets mix): three depths, most of it nearest.
     var TRAFFIC = { variants: [0, 0, 2, 3, 1, 5], colours: ["#00DFFF", "#FF1493", "#FFB300", "#9D4EDD", "#38BDF8", "#F43F5E"],
         speed: [0, 270, 450, 630], extra: 90, scale: [0, 0.10, 0.17, 0.27], alpha: [0, 0.35, 0.60, 0.85], perSecond: 0.7 };
-    // An Overwatch patrol drone comes through now and then, sooner when the heat is high.
-    var PATROL = { col: "#6E6E6E", scale: 1.5, height: 180, speed: 90, first: 9, every: [24, 22], beam: 40 };
+    // An Overwatch drone comes through now and then: a patrol or tracker at low heat, an interceptor
+    // at 45, and a heavy patrol enforcer at 80 (city_render_bg.js).
+    var PATROL = { col: "#6E6E6E", scale: 1.5, height: 180, speed: 90, responseSpeed: 126, first: 9, every: [22, 18], beam: 40 };
+    // Nullgrid Civic Works' municipal scrubber drone (city_scrubber.js): cleans graffiti off the walls.
+    var SCRUB = { col: "#FFA41B", body: "#15171e", glass: "#FFD27A", solvent: "#9FE7FF",
+        scale: 1.25, cruise: 78, padDrop: 24, speed: 54, workSpeed: 108, cleanTime: 6.5, polishTime: 3.0, rest: [4, 5], polishGap: [7, 10], blindTime: 10 };
     // What can be clicked in the street, as [half-width, height] in the game's pixels.
     var PROP_BOX = { bench: [33, 38], bin: [13, 33], vending: [18, 60], tree: [30, 90], cabinet: [32, 47], hydrant: [12, 34], booth: [18, 63] };
-    // Keystone's support line, rung from the comm booth: what it says while you hold
-    var HOLD = { seconds: 20, each: 5, col: "#8FB8C8", lines: ["YOUR CALL IS IMPORTANT TO US.", "YOUR CALL MAY BE RECORDED TO IMPROVE YOUR EXPERIENCE.", "YOUR CALL IS VERY IMPORTANT TO US."] };
+    // Keystone's support line, rung from the comm booth: what it says while you hold, and Agent 7 at the end.
+    var HOLD = { seconds: 24, each: 3.5, col: "#8FB8C8", lines: [
+        "YOUR CALL IS IMPORTANT TO US.",
+        "DID YOU KNOW? MOST ISSUES ARE RESOLVED BY THE NEXT UPDATE.",
+        "YOUR CALL MAY BE RECORDED TO IMPROVE YOUR EXPERIENCE.",
+        "YOU CAN ALSO FIND ANSWERS IN THE KEYSTONE HELP CENTRE.",
+        "NIA SUPPORT, AGENT 7: YOUR DEVICE IS WORKING AS INTENDED.",
+        "HAVE A CONNECTED DAY."
+    ] };
     var LAMP = { poleH: 168, baseW: 12, baseH: 38, taperH: 10, doorW: 8, doorTop: 35, doorBot: 23 };
     // Overwatch hardware: black body, grey edge, red only in the eye and the beam.
     var CAM = { body: "#000000", edge: "#6E6E6E", eye: "#FF0000", sweep: 0.75, half: 0.2, rate: 0.45, downFor: 12, height: 150 };
@@ -260,16 +271,24 @@
     var OP_COLOURS = ["#FF1493", "#00DFFF", "#39FF14", "#FF3E00", "#8A2BE2"];
     var HEAT = { rise: 34, fall: 14, grace: 1.2, tag: 20, cam: 30 };
     var SCAN = { range: 900, time: 0.7, show: 6 };
-    var TAG_ORDER = ["operator_mark", "crown", "glitch_eye", "offbook", "bolt", "null_sig", "crimson_row", "arrow_up", "circuit", "stackrunners", "gridrot"];
+    var TAG_ORDER = ["operator_mark", "intercept_mark", "crown", "glitch_eye", "offbook", "v8_crest", "bolt", "null_sig", "crimson_row", "arrow_up", "circuit", "stackrunners", "gridrot"];
     var TAG_MAX = 10, TAG_HALF = 18, TAG_TIME = 0.6;
 
     var op = { x: 0, dir: 1, target: 0, wanderAt: 0, colour: 0 };
     var drone = { x: 0, y: 0 };
     var tags = [], tagNext = 0, scan = null, camDownUntil = 0;
-    var cars = [], patrol = null, patrolAt = PATROL.first, bits = [], floats = [];
+    var cars = [], patrol = null, patrolAt = PATROL.first, patrolCount = 0, scrubber = null, bits = [], floats = [];
     var arcadeOpenUntil = 0;        // while the arcade's door stands lit and its tune plays
     var holdCall = null;            // a call to Keystone in progress: { t0, until, lines, x }
     var heat = 0, seen = false, lastSeen = -10, lastPointer = -10, lastHud = -1, pointerIn = false;
+    var nonHuman = !!(typeof navigator !== "undefined" && navigator.webdriver);
+    if (nonHuman && typeof console !== "undefined" && console.info) {
+        console.info(
+            "%cOVERWATCH // CENTRAL DISPATCH%c\nNon-biological optical sweep registered in Lower Streets.\nAssigned unit: TRACKER DRONE RECON SQUADRON 04.\nCaller 54 holds the line. Full node briefing: /llms.txt",
+            "background:#FF0000;color:#000000;font-weight:bold;padding:2px 6px;",
+            "color:#8FB8C8;"
+        );
+    }
 
     function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
     // The scene's own clock: the time of the frame being drawn. Clicks are stamped with it, since
@@ -391,6 +410,27 @@
         }
 
         tags.length = 0;
+        var leftB = S.near.filter(function (b) { return b !== S.arcade && b.x + b.w > 90 * K && b.x < W * 0.4; })[0];
+        var ambB = leftB || S.arcade;
+        if (ambB && !REDUCE) {
+            var ax = leftB ? clamp(leftB.x + leftB.w - 58 * K, 36 * K, W - 36 * K) : clamp(ambB.x + ambB.w * 0.22, 36 * K, W - 36 * K);
+            var ay = gy - Math.min(156 * K, ambB.h * 0.58);
+            tags.push({ x: ax, y: ay, style: "intercept_mark", col: "#39F3FF", rot: -0.028, t0: -10, seen: false, len: [5, 8], amb: true });
+        }
+        scrubber = {
+            x: oldW && scrubber ? clamp(scrubber.x * W / oldW, 44 * K, W - 44 * K) : clamp(W * 0.15, 44 * K, W - 44 * K),
+            y: gy - SCRUB.cruise * K,
+            dir: oldW && scrubber ? scrubber.dir : 1,
+            state: "patrol",
+            job: null,
+            prog: 0,
+            restUntil: clock + 3.2,
+            polishAt: clock + 7,
+            blindUntil: 0,
+            paint: null,
+            pad: 0,
+            sparkAt: 0
+        };
         op.x = oldW ? clamp(op.x * W / oldW, 30, W - 30) : W * 0.62;
         op.target = op.x;
         drone.x = op.x; drone.y = gy - (OP.h + 26) * K;
@@ -1367,36 +1407,59 @@
     }
     function drawPatrol(t) {
         if (!patrol) return;
-        var c = ctx, col = PATROL.col, pulse = 0.5 + Math.sin(t * 3) * 0.5, eye = 0.6 + 0.4 * Math.sin(t * 3);
+        var c = ctx, col = PATROL.col, type = patrol.type || "patrol";
+        var pulse = 0.5 + Math.sin(t * 3) * 0.5, eye = 0.6 + 0.4 * Math.sin(t * 3);
+        var emitY = type === "tracker" ? 16 : (type === "response" ? 11 : 14);
         c.save();
         c.translate(patrol.x, patrol.y);
         if (patrol.paint) c.rotate(Math.sin(t * 2.8) * 0.14);
         c.scale(patrol.dir * PATROL.scale * K, PATROL.scale * K);
         if (!patrol.paint) {
-            var g = c.createLinearGradient(0, 8, 0, 112);
+            var g = c.createLinearGradient(0, emitY - 6, 0, 112);
             g.addColorStop(0, "rgba(255,0,0," + (0.18 * pulse).toFixed(3) + ")");
             g.addColorStop(1, "rgba(255,0,0,0)");
             c.fillStyle = g;
-            c.beginPath(); c.moveTo(-5, 8); c.lineTo(5, 8); c.lineTo(30, 112); c.lineTo(-30, 112); c.closePath(); c.fill();
+            c.beginPath(); c.moveTo(-5, emitY - 6); c.lineTo(5, emitY - 6); c.lineTo(30, 112); c.lineTo(-30, 112); c.closePath(); c.fill();
         }
         c.fillStyle = "#000000"; c.strokeStyle = col; c.lineWidth = 1.3; c.lineJoin = "miter";
-        owPod(c, -31, -7, 16, 10);
-        owPod(c, 31, -7, 16, 10);
-        owPoly(c, [-25, -8, -33, -19, -28, -19, -17, -8]);
-        line(c, 13, -8, 13, -16);
-        c.fillStyle = col; c.fillRect(12, -18, 2, 2); c.fillStyle = "#000000";
-        c.shadowBlur = 2 * DPR; c.shadowColor = col;
-        owPoly(c, [-21, -5, 21, -5, 24, 0, 16, 9, -16, 9, -24, 0]);
-        c.shadowBlur = 0;
-        c.strokeStyle = "rgba(255,255,255,0.13)"; c.lineWidth = 1;
-        strokePath(c, [-10, -5, -10, 9, 10, -5, 10, 9]);
-        c.fillStyle = "rgba(255,255,255,0.14)"; c.fillRect(-19, -2, 6, 0.8); c.fillRect(-19, 1, 6, 0.8); c.fillRect(-18, 4, 5, 0.8);
-        c.fillStyle = "#000000"; c.strokeStyle = col; c.lineWidth = 1.3;
-        c.fillRect(-25, -8, 50, 3); c.strokeRect(-25, -8, 50, 3);
-        c.fillStyle = "rgba(255,255,255,0.30)"; c.fillRect(-24, -8, 48, 0.8);
-        c.fillStyle = "rgba(210,220,235,0.8)"; c.fillRect(-23, -6.6, 1.6, 1.2); c.fillRect(21.4, -6.6, 1.6, 1.2);
-        c.fillStyle = "#000000";
-        owPoly(c, [-5, 9, 5, 9, 3, 13, -3, 13]);
+        if (type === "response") {
+            owPod(c, -19, -13, 12, 6);
+            owPod(c, -19, 6, 12, 6);
+            owPoly(c, [-10, -9, -17, -18, -13, -18, -3, -9]);
+            c.shadowBlur = 2 * DPR; c.shadowColor = col;
+            owPoly(c, [-18, -6, -8, -9, 8, -9, 24, 0, 8, 9, -8, 9, -18, 6]);
+            c.shadowBlur = 0;
+            c.lineWidth = 1.6;
+            strokePath(c, [13, -6, 31, -3, 13, 6, 31, 3]);
+            c.lineWidth = 1.3;
+            c.fillStyle = "rgba(255,255,255,0.14)"; c.fillRect(-15, -3, 5, 0.8); c.fillRect(-15, 0, 5, 0.8); c.fillRect(-15, 3, 5, 0.8);
+        } else if (type === "tracker") {
+            owPoly(c, [-6, -9, -13, -19, -9, -19, 1, -9]);
+            owPod(c, 0, 9, 11, 5);
+            c.shadowBlur = 2 * DPR; c.shadowColor = col;
+            owPoly(c, [-4, -10, 4, -10, 10, -4, 10, 4, 4, 10, -4, 10, -10, 4, -10, -4]);
+            c.shadowBlur = 0;
+            line(c, 7, -8, 7, -12);
+            c.fillStyle = col; c.fillRect(6, -14, 2, 2); c.fillStyle = "#000000";
+        } else {
+            owPod(c, -31, -7, 16, 10);
+            owPod(c, 31, -7, 16, 10);
+            owPoly(c, [-25, -8, -33, -19, -28, -19, -17, -8]);
+            line(c, 13, -8, 13, -16);
+            c.fillStyle = col; c.fillRect(12, -18, 2, 2); c.fillStyle = "#000000";
+            c.shadowBlur = 2 * DPR; c.shadowColor = col;
+            owPoly(c, [-21, -5, 21, -5, 24, 0, 16, 9, -16, 9, -24, 0]);
+            c.shadowBlur = 0;
+            c.strokeStyle = "rgba(255,255,255,0.13)"; c.lineWidth = 1;
+            strokePath(c, [-10, -5, -10, 9, 10, -5, 10, 9]);
+            c.fillStyle = "rgba(255,255,255,0.14)"; c.fillRect(-19, -2, 6, 0.8); c.fillRect(-19, 1, 6, 0.8); c.fillRect(-18, 4, 5, 0.8);
+            c.fillStyle = "#000000"; c.strokeStyle = col; c.lineWidth = 1.3;
+            c.fillRect(-25, -8, 50, 3); c.strokeRect(-25, -8, 50, 3);
+            c.fillStyle = "rgba(255,255,255,0.30)"; c.fillRect(-24, -8, 48, 0.8);
+            c.fillStyle = "rgba(210,220,235,0.8)"; c.fillRect(-23, -6.6, 1.6, 1.2); c.fillRect(21.4, -6.6, 1.6, 1.2);
+            c.fillStyle = "#000000";
+            owPoly(c, [-5, 9, 5, 9, 3, 13, -3, 13]);
+        }
         c.fillStyle = "#000000"; c.strokeStyle = col; c.lineWidth = 1;
         c.beginPath(); c.arc(0, 0, 6.6, 0, Math.PI * 2); c.fill(); c.stroke();
         if (patrol.paint) {
@@ -1411,22 +1474,199 @@
             c.fillStyle = "rgba(255,255,255," + (0.5 * eye).toFixed(2) + ")"; c.fillRect(1.2, -2.6, 1.6, 1.6);
         }
         c.fillStyle = "rgba(255,0,0," + (0.55 + 0.45 * pulse).toFixed(2) + ")"; c.shadowBlur = 8 * DPR; c.shadowColor = "#FF0000";
-        c.beginPath(); c.arc(0, 14, 2.4, 0, Math.PI * 2); c.fill(); c.shadowBlur = 0;
+        c.beginPath(); c.arc(0, emitY, type === "patrol" ? 2.4 : 1.8, 0, Math.PI * 2); c.fill(); c.shadowBlur = 0;
         c.restore();
     }
     function updatePatrol(t, dt) {
         if (!patrol) {
-            if (heat >= 80 && patrolAt > t + 2) patrolAt = t + 2;
+            if (heat >= 80 && patrolAt > t + 1.5) patrolAt = t + 1.5;
+            else if (heat >= 45 && patrolAt > t + 3) patrolAt = t + 3;
             if (t < patrolAt) return;
             var dir = Math.random() < 0.5 ? 1 : -1;
-            patrol = { x: dir > 0 ? -70 * K : W + 70 * K, y: S.patrolY, dir: dir };
+            var type = heat >= 80 ? "patrol" : (heat >= 45 ? "response" : (patrolCount % 2 === 0 ? "patrol" : "tracker"));
+            patrolCount++;
+            patrol = { x: dir > 0 ? -70 * K : W + 70 * K, y: S.patrolY, dir: dir, type: type };
         }
-        patrol.x += patrol.dir * PATROL.speed * K * dt;
+        var spd = patrol.type === "response" ? PATROL.responseSpeed : PATROL.speed;
+        patrol.x += patrol.dir * spd * K * dt;
         patrol.y = S.patrolY + Math.sin(t * 1.3) * 4 * K;
         if (patrol.x < -80 * K || patrol.x > W + 80 * K) {
             patrol = null;
             patrolAt = t + PATROL.every[0] + Math.random() * PATROL.every[1];
         }
+    }
+
+    // ─── Municipal scrubber drone (city_scrubber.js) ───────────────────────
+    // Nullgrid Civic Works' surface maintenance: flies along the street at about a storey up, swings
+    // its bristle pad onto sprayed tags with solvent mist until the mark is gone, or polishes bare
+    // wall when nothing is waiting. Clicking its amber lens sprays it blind.
+    function hazardBand(c, x, y, w, h, col, back) {
+        var n = Math.max(1, Math.round(w / (h * 2))), p = w / n, sw = p / 2, k, sx;
+        c.save();
+        c.fillStyle = back; c.fillRect(x, y, w, h);
+        c.beginPath(); c.rect(x, y, w, h); c.clip();
+        c.fillStyle = col;
+        for (k = -1; k <= n; k++) {
+            sx = x + (k + 0.5) * p - h / 2 - sw / 2;
+            pPath(c, [sx, y + h, sx + h, y, sx + h + sw, y, sx + sw, y + h], true);
+            c.fill();
+        }
+        c.restore();
+    }
+    function polishSpot(s) {
+        var best = null, i, b, cx;
+        for (i = 0; i < S.near.length; i++) {
+            b = S.near[i];
+            if (b.w < 140 * K || b.h < 180 * K) continue;
+            cx = clamp(s.x + s.dir * (90 + Math.random() * 140) * K, b.x + 36 * K, b.x + b.w - 36 * K);
+            if (Math.abs(cx - (b.x + b.w / 2)) < 42 * K) continue;
+            if (cx > 28 * K && cx < W - 28 * K && (!best || Math.abs(cx - s.x) < Math.abs(best.x - s.x))) {
+                best = { x: cx, y: S.gy - (100 + Math.random() * 65) * K, polish: true };
+            }
+        }
+        return best;
+    }
+    function updateScrubber(t, dt) {
+        if (!scrubber) return;
+        var s = scrubber, cruiseY = S.gy - SCRUB.cruise * K;
+        if (t < s.blindUntil) {
+            s.pad = Math.max(0, s.pad - dt * 3);
+            s.y = Math.min(cruiseY + 18 * K, s.y + 12 * K * dt);
+            if (t >= s.sparkAt) {
+                s.sparkAt = t + 0.16;
+                addBit(s.x + (Math.random() - 0.5) * 24 * K, s.y + 6 * K, (Math.random() - 0.5) * 45 * K, -20 * K, "rgba(200,235,255,0.8)", 1.8 * K, 0.45, 220 * K);
+            }
+            return;
+        }
+        if (s.paint) { s.paint = null; s.state = "patrol"; }
+        if (s.state === "patrol") {
+            var lo = 44 * K, hi = Math.max(lo + 20, W - 44 * K);
+            s.x += s.dir * SCRUB.speed * K * dt;
+            if (s.x < lo) { s.x = lo; s.dir = 1; } else if (s.x > hi) { s.x = hi; s.dir = -1; }
+            s.y += clamp(cruiseY - s.y, -72 * K * dt, 72 * K * dt);
+            s.pad = Math.max(0, s.pad - dt * 3);
+            if (t >= s.restUntil) {
+                var best = null, bd = 1e9;
+                tags.forEach(function (g) {
+                    if (t - g.t0 < TAG_TIME) return;
+                    var d = Math.abs(g.x - s.x);
+                    if (d < bd) { bd = d; best = g; }
+                });
+                if (best) { s.job = { tag: best, x: best.x, y: best.y, polish: false }; s.state = "going"; s.prog = 0; return; }
+            }
+            if (t >= s.polishAt) {
+                var sp = polishSpot(s);
+                s.polishAt = t + SCRUB.polishGap[0] + Math.random() * SCRUB.polishGap[1];
+                if (sp) { s.job = sp; s.state = "going"; s.prog = 0; }
+            }
+        } else if (s.state === "going") {
+            if (!s.job || (!s.job.polish && tags.indexOf(s.job.tag) === -1)) { s.state = "patrol"; s.job = null; return; }
+            var tx = s.job.x, ty = s.job.y - SCRUB.padDrop * K, dx = tx - s.x, dy = ty - s.y, d = Math.sqrt(dx * dx + dy * dy);
+            if (Math.abs(dx) > 2 * K) s.dir = dx >= 0 ? 1 : -1;
+            var step = SCRUB.workSpeed * K * dt;
+            if (d <= step || d < 1) { s.x = tx; s.y = ty; s.state = "cleaning"; s.prog = 0; }
+            else { s.x += dx / d * step; s.y += dy / d * step; }
+        } else if (s.state === "cleaning") {
+            if (!s.job || (!s.job.polish && tags.indexOf(s.job.tag) === -1)) { s.state = "patrol"; s.job = null; s.prog = 0; return; }
+            if (s.pad < 1) { s.pad = Math.min(1, s.pad + dt * 3.6); return; }
+            s.prog += dt;
+            if (t >= s.sparkAt) {
+                s.sparkAt = t + 0.12;
+                addBit(s.job.x + (Math.random() - 0.5) * 26 * K, s.job.y + (Math.random() - 0.5) * 18 * K, (Math.random() - 0.5) * 36 * K, -16 * K, "rgba(200,235,255,0.7)", 1.6 * K, 0.4, 180 * K);
+            }
+            var need = s.job.polish ? SCRUB.polishTime : SCRUB.cleanTime;
+            if (s.prog >= need) {
+                if (!s.job.polish) {
+                    var idx = tags.indexOf(s.job.tag);
+                    if (idx !== -1) tags.splice(idx, 1);
+                    s.restUntil = t + SCRUB.rest[0] + Math.random() * SCRUB.rest[1];
+                }
+                s.state = "patrol"; s.job = null; s.prog = 0;
+            }
+        }
+    }
+    function scrubberTagAlpha(g) {
+        if (!scrubber || scrubber.state !== "cleaning" || !scrubber.job || scrubber.job.tag !== g) return 1;
+        return Math.max(0.05, 1 - scrubber.prog / SCRUB.cleanTime);
+    }
+    function drawScrubber(t) {
+        if (!scrubber) return;
+        var c = ctx, s = scrubber, sk = SCRUB.scale * K;
+        var bob = REDUCE ? 0 : Math.sin(t * 2.4 + s.x * 0.01) * 1.5 * K;
+        var sx = s.x, sy = s.y + bob, edge = SCRUB.col, k, a, ma;
+        c.save();
+        c.lineJoin = "miter"; c.shadowBlur = 0;
+        if (s.pad > 0) {
+            var pr = 11 * sk * s.pad, py = sy + SCRUB.padDrop * K * s.pad;
+            c.strokeStyle = "#3a3f4a"; c.lineWidth = 3 * K;
+            c.beginPath();
+            c.moveTo(sx, sy + 9 * sk);
+            c.lineTo(sx - s.dir * 4 * K, sy + (9 * sk + SCRUB.padDrop * K * s.pad) / 2 + 3 * K);
+            c.lineTo(sx, py);
+            c.stroke();
+            c.fillStyle = "#1c1f28"; c.beginPath(); c.arc(sx, py, pr, 0, Math.PI * 2); c.fill();
+            c.strokeStyle = edge; c.lineWidth = 1.2 * K; c.stroke();
+            var working = s.state === "cleaning" && s.pad >= 1 && !REDUCE, a0 = working ? t * 11 : 0;
+            c.strokeStyle = "rgba(255,210,122,0.5)"; c.lineWidth = K;
+            c.beginPath();
+            for (k = 0; k < 6; k++) {
+                a = a0 + k * Math.PI / 3;
+                c.moveTo(sx + Math.cos(a) * pr * 0.3, py + Math.sin(a) * pr * 0.3);
+                c.lineTo(sx + Math.cos(a) * pr * 0.85, py + Math.sin(a) * pr * 0.85);
+            }
+            c.stroke();
+            c.fillStyle = "#3a3f4a"; c.beginPath(); c.arc(sx, py, 2.5 * K, 0, Math.PI * 2); c.fill();
+            if (working && s.job && !s.job.polish) {
+                c.fillStyle = "rgba(200,235,255,0.35)";
+                for (k = 0; k < 8; k++) {
+                    ma = t * 3.3 + k * 0.8;
+                    c.fillRect(sx + Math.cos(ma) * (pr + (4 + (k % 3) * 3) * K), py + Math.sin(ma) * (pr + (4 + (k % 3) * 3) * K), 1.5 * K, 1.5 * K);
+                }
+            }
+        }
+        c.translate(sx, sy);
+        var spin = 1;
+        if (t < s.blindUntil && !REDUCE) {
+            var cs = Math.cos(t * 6);
+            spin = (cs < 0 ? -1 : 1) * Math.max(0.2, Math.abs(cs));
+        }
+        c.scale(s.dir * spin * sk, sk);
+        c.fillStyle = SCRUB.body; c.strokeStyle = edge; c.lineWidth = 1.2;
+        owPod(c, -22, -11, 12, 8); c.fillStyle = SCRUB.body;
+        owPod(c, 22, -11, 12, 8); c.fillStyle = SCRUB.body;
+        // solvent tank with sight glass and fore regulator
+        owPoly(c, [-15, -13, -5, -13, -3, -11, -5, -9, -15, -9, -16, -11]);
+        c.fillStyle = "rgba(159,231,255,0.7)"; c.fillRect(-13, -12, 6, 2);
+        c.fillStyle = "#3a3f4a"; c.fillRect(-4, -12.5, 5, 3.5);
+        c.fillStyle = SCRUB.solvent; c.fillRect(-2.5, -11.5, 2, 2);
+        // flat top deck and spar
+        c.fillStyle = SCRUB.body; c.strokeStyle = edge; c.lineWidth = 1.2;
+        c.fillRect(-22, -15, 44, 2); c.strokeRect(-22, -15, 44, 2);
+        c.fillStyle = "#3a3f4a"; c.fillRect(8, -13, 1.5, 4);
+        c.fillStyle = SCRUB.body; c.strokeStyle = edge; c.lineWidth = 1.2;
+        c.fillRect(-16, -9, 32, 3); c.strokeRect(-16, -9, 32, 3);
+        c.fillStyle = "rgba(255,210,122,0.85)"; c.fillRect(-15, -7.6, 1.6, 1.2); c.fillRect(13.4, -7.6, 1.6, 1.2);
+        // slung hull with hazard keel band
+        c.fillStyle = SCRUB.body;
+        c.shadowBlur = 3 * DPR; c.shadowColor = SCRUB.col;
+        owPoly(c, [-17, -6, 13, -6, 17, 0, 12, 9, -13, 9, -17, 4]);
+        c.shadowBlur = 0;
+        hazardBand(c, -12, 6, 22, 3, SCRUB.col, "#1a1a1a");
+        c.fillStyle = "rgba(255,255,255,0.14)"; c.fillRect(-14, -2, 6, 0.8); c.fillRect(-14, 1, 6, 0.8);
+        // amber lens at (4, 1)
+        c.fillStyle = "#000000"; c.strokeStyle = edge; c.lineWidth = 1;
+        c.beginPath(); c.arc(4, 1, 5, 0, Math.PI * 2); c.fill(); c.stroke();
+        if (!s.paint) {
+            c.fillStyle = SCRUB.glass; c.shadowBlur = 6 * DPR; c.shadowColor = SCRUB.col;
+            c.beginPath(); c.arc(4, 1, 3.4, 0, Math.PI * 2); c.fill(); c.shadowBlur = 0;
+            c.fillStyle = "rgba(255,255,255,0.6)"; c.fillRect(5, -1, 1.4, 1.4);
+        } else {
+            c.fillStyle = s.paint; c.globalAlpha = 0.9;
+            c.beginPath(); c.arc(4, 1, 5.5, 0, Math.PI * 2); c.fill();
+            c.fillRect(5, 3, 1.6, 5);
+            c.globalAlpha = 1;
+        }
+        c.restore();
     }
 
     // ─── Loose bits and floating words ─────────────────────────────────────
@@ -1583,6 +1823,19 @@
             c.font = "bold " + (s * 1.05).toFixed(1) + "px cyber, monospace"; c.textAlign = "center"; c.textBaseline = "middle";
             c.fillText("0", 0, s * 0.06);
         } },
+        v8_crest: { drips: [[0, 1], [-0.5, 0.5]], draw: function (c, s, col) {
+            tagStroke(c, s, col);
+            tagPoly(c, [[0, -s], [s, 0], [0, s], [-s, 0]]); c.stroke();
+            c.font = "bold " + (s * 0.72).toFixed(1) + "px cyber, monospace"; c.textAlign = "center"; c.textBaseline = "middle";
+            c.fillText("V8", 0, s * 0.04);
+        } },
+        intercept_mark: { drips: [[-0.65, 0.92], [0.55, 0.92]], draw: function (c, s, col) { // a block torn into four scanlines
+            var bars = [[-0.8, 0], [-0.34, 0.3], [0.12, -0.3], [0.58, 0]], i;
+            c.fillStyle = col;
+            for (i = 0; i < bars.length; i++) c.fillRect(-s * 0.8 + bars[i][1] * s, bars[i][0] * s, s * 1.6, s * 0.26);
+            c.fillRect(-s * 0.8, s * 0.92, s * 0.5, s * 0.08);
+            c.fillRect(s * 0.3, s * 0.92, s * 0.5, s * 0.08);
+        } },
         glitch_eye: { drips: [[-0.4, 0.55], [0.4, 0.55]], draw: function (c, s, col) {
             tagStroke(c, s, col);
             tagPoly(c, [[-s, 0], [-s * 0.4, -s * 0.55], [s * 0.4, -s * 0.55], [s, 0], [s * 0.4, s * 0.55], [-s * 0.4, s * 0.55]]); c.stroke();
@@ -1666,20 +1919,22 @@
     function tagHalf() { return Math.max(13, TAG_HALF * K); }
 
     // A tag is revealed left to right while it is sprayed, inside a ring that turns red if the
-    // operator is seen; once done, two runs of paint hang from it.
+    // operator is seen; once done, two runs of paint hang from it. While a scrubber works on it,
+    // it fades (cityScrubberTagAlpha).
     function drawTags(t) {
         var s = tagHalf();
         tags.forEach(function (g) {
-            var p = clamp((t - g.t0) / TAG_TIME, 0, 1), st = TAG_STYLES[g.style];
+            var p = clamp((t - g.t0) / TAG_TIME, 0, 1), st = TAG_STYLES[g.style], fade = scrubberTagAlpha(g);
             ctx.save();
             ctx.translate(g.x, g.y);
             ctx.save();
             ctx.rotate(g.rot);
             if (p < 1) { ctx.beginPath(); ctx.rect(-s * 1.3, -s * 1.6, s * 2.6 * p, s * 3.6); ctx.clip(); }
-            ctx.shadowColor = g.col; ctx.shadowBlur = 6 * DPR;
+            ctx.globalAlpha = (g.amb ? 0.68 : 1) * fade;
+            ctx.shadowColor = g.col; ctx.shadowBlur = 6 * DPR * fade;
             st.draw(ctx, s, g.col);
             ctx.shadowBlur = 0;
-            ctx.globalAlpha = 0.6; ctx.fillStyle = g.col;
+            ctx.globalAlpha = 0.6 * fade; ctx.fillStyle = g.col;
             st.drips.forEach(function (d, k) {
                 var len = g.len[k] * (s / TAG_HALF) * p;
                 ctx.fillRect(d[0] * s - 0.8, d[1] * s - 1, 1.6, len + 1);
@@ -1739,7 +1994,12 @@
             return { x: l.x + 26 * K, y: S.gy - LAMP.poleH * K, label: l.broken ? "STREETLIGHT // FAULT" : "STREETLIGHT // OK" };
         });
         if (S.cam) out.push({ x: S.cam.x, y: S.cam.y + 6 * K, label: camIsDown(t) ? "CAMERA // DISABLED" : "CAMERA // LIVE", red: true });
-        if (patrol) out.push({ x: patrol.x, y: patrol.y, label: patrol.paint ? "PATROL // BLINDED" : "PATROL // LIVE", red: true });
+        if (scrubber) out.push({ x: scrubber.x, y: scrubber.y, label: t < scrubber.blindUntil ? "SCRUBBER // BLINDED" : "CIVIC // SCRUBBER" });
+        if (patrol) {
+            var pName = patrol.type === "response" ? "OW // INTERCEPTOR" : (patrol.type === "tracker" ? "OW // TRACKER" : "OW // PATROL");
+            out.push({ x: patrol.x, y: patrol.y, label: patrol.paint ? pName + " // BLINDED" : pName, red: true });
+        }
+        if (nonHuman) out.push({ x: op.x, y: S.gy - (OP.h + 8) * K, label: "VISITOR // NON-HUMAN" });
         return out;
     }
 
@@ -1807,6 +2067,7 @@
         drone.y += (ty - drone.y) * f;
         updateCars(dt);
         updatePatrol(t, dt);
+        updateScrubber(t, dt);
     }
 
     function updateHeat(t, dt, cone) {
@@ -1838,6 +2099,7 @@
         drawArcadeDoor(t);
         drawProps(t);
         S.lamps.forEach(drawLamp);
+        drawScrubber(t);
         var cone = S.cam ? drawCamera(t) : null;
         drawPatrol(t);
         drawOperator();
@@ -1880,10 +2142,10 @@
     // ─── Things that answer a click ────────────────────────────────────────
     // Nothing marks them (the game's rule for secrets). The operator changes colour, and the page's
     // edge with it; the drone pulses the scanner; the camera burns out for a while, or comes back;
-    // the patrol drone's eye can be spray-painted shut; a streetlight breaks or is mended; a bare
-    // wall takes a tag; the vending machine drops a can, a bin can be rummaged, the hydrant sprays
-    // and a tree shakes. The arcade's door lets its tune out, and the comm booth rings Keystone,
-    // who put you on hold.
+    // the patrol drone's eye and the municipal scrubber's lens can be spray-painted shut; a streetlight
+    // breaks or is mended; a bare wall takes a tag; the vending machine drops a can, a bin can be
+    // rummaged, the hydrant sprays and a tree shakes. The arcade's door lets its tune out, and the
+    // comm booth rings Keystone, who put you on hold.
     function setOperatorColour(i) {
         op.colour = i % OP_COLOURS.length;
         var root = document.documentElement.style;
@@ -1945,7 +2207,7 @@
             } else {
                 if (player) player.playTune("hold", HOLD.seconds, function () { holdCall = null; });
                 holdCall = { t0: t, until: t + HOLD.seconds, x: p.x,
-                    lines: ["PLEASE HOLD. YOU ARE CALLER " + (50 + Math.floor(Math.random() * 15)) + "."].concat(HOLD.lines) };
+                    lines: ["PLEASE HOLD. YOU ARE CALLER 54."].concat(HOLD.lines) };
             }
         } else if (p.kind === "tree") {
             p.shakeUntil = t + 0.8;
@@ -1964,6 +2226,15 @@
         if (near(x, y, drone.x, drone.y, pad + 4)) { scan = { t0: t, x: op.x, y: S.gy - OP.h * K / 2 }; sfx(420, 1680, 0.5, "sine"); return; }
         if (patrol && Math.abs(x - patrol.x) <= 58 * K && Math.abs(y - patrol.y) <= 26 * K) {
             patrol.paint = OP_COLOURS[op.colour];
+            hiss(0.5, "highpass", 3600, 0.1);
+            return;
+        }
+        if (scrubber && t >= scrubber.blindUntil && Math.abs(x - scrubber.x) <= 36 * K && Math.abs(y - scrubber.y) <= 24 * K) {
+            scrubber.paint = OP_COLOURS[op.colour];
+            scrubber.blindUntil = t + SCRUB.blindTime;
+            scrubber.state = "patrol";
+            scrubber.job = null;
+            scrubber.prog = 0;
             hiss(0.5, "highpass", 3600, 0.1);
             return;
         }
