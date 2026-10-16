@@ -44,7 +44,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;600&display=swap" rel="stylesheet">
   <link rel="preload" href="fonts/cyber.ttf" as="font" type="font/ttf" crossorigin>
-  <link rel="stylesheet" href="css/site.css?v=20261016b">
+  <link rel="stylesheet" href="css/site.css?v=20261016c">
 </head>
 <body>
   <main>
@@ -65,7 +65,7 @@
         <h1 class="wordmark" id="wordmark">[MODE-ZERO]</h1>
         <p class="tagline">Move. Evade. Hack.</p>
         <p class="blurb">You gave Keystone ten years and left with a datapad and a service award. Now you work Nullgrid alone, with Overwatch's red eye on every street.</p>
-        <p class="genre">A side-on cyberpunk platformer for PC</p>
+        <p class="genre">A side-on cyberpunk platformer for PC <span class="genre-sep" aria-hidden="true">//</span> <a class="genre-cta" href="#wishlist">Wishlist &amp; notify</a></p>
       </div>
       <div class="scene-room" aria-hidden="true"></div>
 
@@ -96,11 +96,22 @@
         </li>
       </ul>
 
+      <div class="panel panel-wishlist" id="wishlist">
+        <h2>Wishlist</h2>
+        <p class="wishlist-copy">Leave an address for one message from <code>modezero@untrustednetwork.dev</code> when the Steam page and release build go live. No newsletter, no third-party tracking.</p>
+        <form class="wishlist-form" id="wishlistForm" action="mailto:modezero@untrustednetwork.dev" method="post" enctype="text/plain" data-endpoint="">
+          <input class="wishlist-input" id="wishlistEmail" name="email" type="email" required autocomplete="email" placeholder="operator@domain.tld" aria-label="Email address">
+          <button class="wishlist-btn" type="submit">Notify me</button>
+        </form>
+        <p class="wishlist-note" id="wishlistNote" role="status" aria-live="polite"></p>
+      </div>
+
       <div class="panel">
         <h2>Contact</h2>
         <dl class="dir">
           <div><dt>General</dt><dd><a href="mailto:contact@untrustednetwork.dev">contact@untrustednetwork.dev</a></dd></div>
           <div><dt>Press</dt><dd><a href="mailto:press@untrustednetwork.dev">press@untrustednetwork.dev</a></dd></div>
+          <div><dt>Wishlist</dt><dd><a href="mailto:modezero@untrustednetwork.dev?subject=%5BMODE-ZERO%5D%20Wishlist">modezero@untrustednetwork.dev</a></dd></div>
         </dl>
       </div>
     </section>
@@ -111,7 +122,7 @@
     <p class="foot-end" id="hangUp">NO CARRIER</p>
   </footer>
 
-  <script src="js/streetmusic.js?v=20261016b"></script>
-  <script src="js/site.js?v=20261016b"></script>
+  <script src="js/streetmusic.js?v=20261016c"></script>
+  <script src="js/site.js?v=20261016c"></script>
 </body>
 </html>

@@ -741,9 +741,10 @@
     function drawCabinet(c, doors, C) {
         var w = [0, 32, 58, 84][doors], h = [0, 42, 38, 36][doors], x0 = -w / 2, top = -4 - h, dw = w / doors, d, v;
         c.fillStyle = C.body; c.fillRect(x0, top, w, h);
-        c.strokeStyle = C.edge; c.lineWidth = 1; c.globalAlpha = 0.85; c.strokeRect(x0 + 0.5, top + 0.5, w - 1, h - 1); c.globalAlpha = 1;
+        c.strokeStyle = C.edge; c.lineWidth = 1; c.globalAlpha = 0.85; c.strokeRect(x0 + 0.5, top + 0.5, w - 1, h); c.globalAlpha = 1;
         c.fillStyle = "#2a2d34"; c.fillRect(x0 - 3, -4, w + 6, 4);                                  // the plinth
-        c.fillStyle = C.edge; c.globalAlpha = 0.35; c.fillRect(x0 - 3, -4, w + 6, 1); c.globalAlpha = 1;
+        c.strokeStyle = C.dim; c.lineWidth = 1; c.strokeRect(x0 - 2.5, -3.5, w + 5, 3);
+        c.fillStyle = C.edge; c.globalAlpha = 0.45; c.fillRect(x0 - 3, -4, w + 6, 1); c.globalAlpha = 1;
         c.fillStyle = C.face;                                                                       // the sloped lid
         c.beginPath(); c.moveTo(x0 - 3, top); c.lineTo(x0 + 3, top - 5); c.lineTo(x0 + w - 3, top - 5); c.lineTo(x0 + w + 3, top); c.closePath(); c.fill();
         c.strokeStyle = C.dim; c.stroke();
@@ -1190,7 +1191,11 @@
     STREET_DRAW.booth = function (c) {
         var col = HOLD.col, onCall = !!holdCall;
         c.scale(0.75, 0.75);
-        c.fillStyle = "#0b1016"; c.fillRect(-20, -4, 40, 4);
+        c.fillStyle = "#242c36"; c.fillRect(-22, -4, 44, 4);
+        c.strokeStyle = "rgba(143,184,200,0.65)"; c.lineWidth = 1.2; c.strokeRect(-21.5, -3.5, 43, 3);
+        c.fillStyle = "#111820"; c.strokeStyle = col; c.lineWidth = 1.2;
+        c.fillRect(-20, -8, 5, 4); c.strokeRect(-20, -8, 5, 4);
+        c.fillRect(15, -8, 5, 4); c.strokeRect(15, -8, 5, 4);
         c.strokeStyle = col; c.lineWidth = 2;
         strokePath(c, [-18, -4, -18, -76, 18, -4, 18, -76]);
         c.fillStyle = "#111820"; c.fillRect(-24, -84, 48, 10);
@@ -1235,7 +1240,7 @@
         S.props.forEach(function (p) {
             var left = p.shakeUntil - t, sway = left > 0 ? Math.sin(left * 38) * 3 * Math.min(1, left / 0.4) : 0;
             ctx.save();
-            ctx.translate(p.x + (p.kind === "bin" ? sway * 0.6 * K : 0), S.gy - 1);
+            ctx.translate(p.x + (p.kind === "bin" ? sway * 0.6 * K : 0), S.gy);
             ctx.scale(K, K);
             STREET_DRAW[p.kind](ctx, p.idx, p.kind === "tree" ? sway : 0);
             ctx.restore();
@@ -1530,8 +1535,11 @@
         if (!scrubber) return;
         var s = scrubber, cruiseY = S.gy - SCRUB.cruise * K;
         if (t < s.blindUntil) {
+            var bLo = 44 * K, bHi = Math.max(bLo + 20, W - 44 * K);
+            s.x += s.dir * SCRUB.speed * 0.45 * K * dt;
+            if (s.x < bLo) { s.x = bLo; s.dir = 1; } else if (s.x > bHi) { s.x = bHi; s.dir = -1; }
             s.pad = Math.max(0, s.pad - dt * 3);
-            s.y = Math.min(cruiseY + 18 * K, s.y + 12 * K * dt);
+            s.y = cruiseY + Math.sin(t * 1.9) * 3.5 * K;
             if (t >= s.sparkAt) {
                 s.sparkAt = t + 0.16;
                 addBit(s.x + (Math.random() - 0.5) * 24 * K, s.y + 6 * K, (Math.random() - 0.5) * 45 * K, -20 * K, "rgba(200,235,255,0.8)", 1.8 * K, 0.45, 220 * K);
@@ -1625,12 +1633,8 @@
             }
         }
         c.translate(sx, sy);
-        var spin = 1;
-        if (t < s.blindUntil && !REDUCE) {
-            var cs = Math.cos(t * 6);
-            spin = (cs < 0 ? -1 : 1) * Math.max(0.2, Math.abs(cs));
-        }
-        c.scale(s.dir * spin * sk, sk);
+        if (t < s.blindUntil && !REDUCE) c.rotate(Math.sin(t * 2.8) * 0.14);
+        c.scale(s.dir * sk, sk);
         c.fillStyle = SCRUB.body; c.strokeStyle = edge; c.lineWidth = 1.2;
         owPod(c, -22, -11, 12, 8); c.fillStyle = SCRUB.body;
         owPod(c, 22, -11, 12, 8); c.fillStyle = SCRUB.body;
@@ -1661,10 +1665,9 @@
             c.beginPath(); c.arc(4, 1, 3.4, 0, Math.PI * 2); c.fill(); c.shadowBlur = 0;
             c.fillStyle = "rgba(255,255,255,0.6)"; c.fillRect(5, -1, 1.4, 1.4);
         } else {
-            c.fillStyle = s.paint; c.globalAlpha = 0.9;
-            c.beginPath(); c.arc(4, 1, 5.5, 0, Math.PI * 2); c.fill();
-            c.fillRect(5, 3, 1.6, 5);
-            c.globalAlpha = 1;
+            c.fillStyle = "rgba(255,210,122,0.45)"; c.shadowBlur = 4 * DPR; c.shadowColor = SCRUB.col;
+            c.beginPath(); c.arc(4, 1, 3.4, 0, Math.PI * 2); c.fill(); c.shadowBlur = 0;
+            c.save(); c.translate(4, 1); c.scale(0.82, 0.82); drawEyePaint(c, s.paint); c.restore();
         }
         c.restore();
     }
@@ -1730,7 +1733,7 @@
     function drawLamp(lamp) {
         var P = LAMP, hw = P.baseW / 2, top = -P.baseH, ph = P.poleH;
         ctx.save();
-        ctx.translate(lamp.x, S.gy - 1);
+        ctx.translate(lamp.x, S.gy);
         ctx.scale(K, K);
         ctx.strokeStyle = "#2a2140"; ctx.lineWidth = 4; ctx.lineCap = "butt";
         ctx.beginPath(); ctx.moveTo(0, top - P.taperH + 1); ctx.lineTo(0, -ph); ctx.lineTo(22, -ph); ctx.stroke();
@@ -2099,8 +2102,8 @@
         drawArcadeDoor(t);
         drawProps(t);
         S.lamps.forEach(drawLamp);
-        drawScrubber(t);
         var cone = S.cam ? drawCamera(t) : null;
+        drawScrubber(t);
         drawPatrol(t);
         drawOperator();
         drawDrone();
@@ -2320,6 +2323,42 @@
             }).observe(hero);
         }
         rafId = requestAnimationFrame(loop);
+    }
+
+    // Wishlist / release dispatch form: posts to data-endpoint when configured, or falls back to
+    // addressing modezero@untrustednetwork.dev so the form works on a static host out of the box.
+    var wishForm = document.getElementById("wishlistForm");
+    var wishInput = document.getElementById("wishlistEmail");
+    var wishNote = document.getElementById("wishlistNote");
+    if (wishForm && wishInput && wishNote) {
+        wishForm.addEventListener("submit", function (e) {
+            e.preventDefault();
+            var email = (wishInput.value || "").replace(/^\s+|\s+$/g, "");
+            if (!email) return;
+            var endpoint = wishForm.getAttribute("data-endpoint");
+            sfx(520, 880, 0.12);
+            if (endpoint) {
+                wishNote.textContent = "TRANSMITTING...";
+                var fd = new FormData(wishForm);
+                fetch(endpoint, { method: "POST", body: fd, headers: { "Accept": "application/json" } })
+                    .then(function (res) {
+                        if (!res.ok) throw new Error("status");
+                        wishInput.value = "";
+                        wishNote.textContent = "LOGGED // YOU WILL HEAR FROM MODEZERO@UNTRUSTEDNETWORK.DEV AT LAUNCH.";
+                    })
+                    .catch(function () {
+                        window.location.href = "mailto:modezero@untrustednetwork.dev?subject="
+                            + encodeURIComponent("[MODE-ZERO] Wishlist")
+                            + "&body=" + encodeURIComponent("Notify me when [MODE-ZERO] launches:\n" + email);
+                        wishNote.textContent = "DISPATCH READY // SEND TO MODEZERO@UNTRUSTEDNETWORK.DEV.";
+                    });
+            } else {
+                window.location.href = "mailto:modezero@untrustednetwork.dev?subject="
+                    + encodeURIComponent("[MODE-ZERO] Wishlist")
+                    + "&body=" + encodeURIComponent("Notify me when [MODE-ZERO] launches:\n" + email);
+                wishNote.textContent = "DISPATCH READY // SEND TO MODEZERO@UNTRUSTEDNETWORK.DEV.";
+            }
+        });
     }
 
     // The footer hangs up; a click on it dials in again.

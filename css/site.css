@@ -29,7 +29,10 @@
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
-html { background: var(--bg); }
+html {
+  background: var(--bg);
+  scroll-behavior: smooth;
+}
 
 body {
   background: var(--bg);
@@ -253,6 +256,9 @@ a:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
   color: var(--text-dim);
 }
 
+.genre-sep { margin: 0 8px; opacity: 0.55; }
+.genre-cta { color: var(--op); font-weight: 600; }
+
 .tagline, .blurb, .genre { transition: opacity 0.5s linear 0.45s; }
 
 /* While the boot lines type, the title waits (js/site.js adds and removes this). */
@@ -343,8 +349,9 @@ a:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
 .card-overwatch h2 { color: var(--text); }
 .card-nullgrid h2 { color: var(--cyan); }
 
-/* the contact panel takes the operator's colour, like its heading, so it is not a second cyan box */
+/* the contact and wishlist panels take the operator's colour, like their headings */
 .panel { border-color: rgba(var(--op-rgb), 0.45); }
+.panel-wishlist { scroll-margin-top: 24px; }
 
 .panel h2 {
   font-family: var(--display);
@@ -354,6 +361,65 @@ a:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
   text-transform: uppercase;
   color: var(--op);
 }
+
+.wishlist-copy {
+  margin-top: 10px;
+  max-width: 68ch;
+  color: var(--text);
+}
+
+.wishlist-copy code {
+  font-family: var(--mono);
+  color: var(--cyan);
+}
+
+.wishlist-form {
+  margin-top: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.wishlist-input {
+  flex: 1 1 240px;
+  max-width: 380px;
+  padding: 9px 12px;
+  background: rgba(3, 3, 9, 0.85);
+  border: 1px solid rgba(209, 213, 235, 0.35);
+  border-radius: 4px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.wishlist-input::placeholder { color: var(--text-dim); }
+.wishlist-input:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; border-color: var(--cyan); }
+
+.wishlist-btn {
+  padding: 9px 18px;
+  background: rgba(var(--op-rgb), 0.14);
+  border: 1px solid var(--op);
+  border-radius: 4px;
+  font-family: var(--display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.wishlist-btn:hover { background: rgba(var(--op-rgb), 0.28); }
+.wishlist-btn:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
+
+.wishlist-note {
+  margin-top: 10px;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--green);
+}
+.wishlist-note:empty { display: none; }
 
 .dir { margin-top: 14px; display: grid; gap: 8px; }
 .dir div { display: flex; flex-wrap: wrap; gap: 4px 20px; }

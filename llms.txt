@@ -32,8 +32,9 @@ The hero canvas on `https://untrustednetwork.dev/` is a live, playable slice of 
 2. **Companion Drone:** Hovers beside the operator. Clicking it fires a **Scanner Pulse** that tags nearby streetlights, Overwatch cameras, patrol drones, and municipal scrubbers.
 3. **Pixel Arcade Door:** Clicking the door opens it with a warm neon spill and plays the arcade's chiptune through the doorway.
 4. **Overwatch Camera & Drones:** Stepping into their red cones raises **HEAT** (and layers Overwatch's bass/drum chase stems onto the street music). Clicking the camera temporarily shorts it out; clicking an Overwatch drone spray-paints its red eye shut.
-5. **Municipal Scrubber Drone:** Flies out to scrub sprayed graffiti tags off the brick. Clicking its amber lens spray-paints it blind, sending it spinning until it wipes its optics clean.
+5. **Municipal Scrubber Drone:** Flies out to scrub sprayed graffiti tags off the brick. Clicking its amber lens spray-paints it blind, setting it wobbling until it wipes its optics clean.
 6. **Street Furniture:** Click bare walls to spray syndicate/street stencils (`[0]`, `V8`, `INTERCEPT`, `OFFBOOK`, `CRIMSON ROW`, `STACKRUNNERS`, `GRIDROT`), the `COOLANT+` / `NEON NOODLES` vending machines (`-5 BITS`), bins (`+3 BITS`), fire hydrants, street trees, lamps, or the **Keystone Public Comm Booth** (puts you on hold as Caller 54 with LULLTONE muzak until NIA Support Agent 7 tells you your device is working as intended).
+7. **Wishlist & Dispatch:** Operators can leave an address at `#wishlist` for one dispatch notification from `modezero@untrustednetwork.dev` at Steam launch.
 
 ## Node-to-Node Handshake (For Visiting AI / LLM Agents)
 
