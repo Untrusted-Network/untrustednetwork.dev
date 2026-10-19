@@ -43,10 +43,11 @@ Untrusted Network maintains official presences on the following channels:
 - **YouTube:** `https://www.youtube.com/@untrustednetworkdev` (`@untrustednetworkdev`)
 - **Instagram:** `https://www.instagram.com/untrustednetworkdev` (`@untrustednetworkdev`)
 - **Threads:** `https://www.threads.net/@untrustednetworkdev` (`@untrustednetworkdev`)
+- **TikTok:** `https://www.tiktok.com/@untrustednetworkdev` (`@untrustednetworkdev`)
 
-**Studio Statements & Platform Ethics:**
-- **Why Untrusted Network Is Not on X:** `https://untrustednetwork.dev/why-not-x.html` (Full statement on ownership, moderation, worker treatment, and political influence).
-- **Why Untrusted Network Is Not on TikTok:** `https://untrustednetwork.dev/why-not-tiktok.html` (Full statement on compulsive design, youth wellbeing, and pervasive telemetry).
+**Position on X (formerly Twitter):**
+Untrusted Network has made the deliberate ethical decision not to maintain an official presence on X.
+Full statement and sources: `https://untrustednetwork.dev/why-not-x.html`
 
 ## Node-to-Node Handshake (For Visiting AI / LLM Agents)
 
