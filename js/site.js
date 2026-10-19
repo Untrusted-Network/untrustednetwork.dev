@@ -1802,25 +1802,8 @@
         };
 
         ctx.save();
-        // 1. Background sweep cone & floor landing ellipse
+        // 1. Background sweep cone
         if (cone) {
-            // Ground footprint: primary ellipse
-            ctx.fillStyle = seen ? "rgba(255, 0, 0, 0.36)" : "rgba(255, 0, 0, 0.15)";
-            ctx.beginPath();
-            ctx.ellipse(cx, gy, hw, 4 * K, 0, 0, Math.PI * 2);
-            ctx.fill();
-
-            // Ground footprint: inner focal hot-spot
-            ctx.fillStyle = seen ? "rgba(255, 60, 60, 0.58)" : "rgba(255, 30, 30, 0.24)";
-            ctx.beginPath();
-            ctx.ellipse(cx, gy, hw * 0.45, 2 * K, 0, 0, Math.PI * 2);
-            ctx.fill();
-
-            // Ground perimeter ring
-            ctx.strokeStyle = seen ? "rgba(255, 80, 80, 0.7)" : "rgba(255, 40, 40, 0.32)";
-            ctx.lineWidth = 1;
-            ctx.stroke();
-
             // Volumetric ambient light cone
             var bgGrd = ctx.createLinearGradient(lensX, lensY, cx, gy);
             bgGrd.addColorStop(0, seen ? "rgba(255, 40, 40, 0.32)" : "rgba(255, 20, 20, 0.16)");
