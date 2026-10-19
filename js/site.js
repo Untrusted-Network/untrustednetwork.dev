@@ -194,7 +194,7 @@
     var BUILDINGS = [
         { name: "MARKET ROW",   hex: "#00DFFF", w: 620, h: 450, ent: 0, roof: [[0.2, "condenser"], [0.5, "hut"], [0.8, "array"]] },
         { name: "PIXEL ARCADE", hex: "#FF1493", w: 560, h: 560, ent: 3, tall: true, roof: [[0.2, "dishbox"], [0.5, "tank"], [0.82, "beacon"]],
-          posters: [{ side: -1, yf: 0.28, art: "overdrive", title: "OVERDRIVE", col: "#FF1493" }, { side: -1, yf: 0.6, art: "shatter", title: "SHATTER", col: "#FF8C00" }] },
+          posters: [{ side: -1, yf: 0.33, art: "overdrive", title: "OVERDRIVE", col: "#FF1493" }, { side: -1, yf: 0.6, art: "shatter", title: "SHATTER", col: "#FF8C00" }] },
         { name: "SUBGRID HUB",  hex: "#8A2BE2", w: 600, h: 400, ent: 1, roof: [[0.2, "hut"], [0.5, "array"], [0.82, "ventbox"]] },
         { name: "CHIP CLINIC",  hex: "#39FF14", w: 640, h: 440, ent: 0, roof: [[0.2, "beacon"], [0.5, "dishbox"], [0.82, "junction"]] },
         { name: "GRID TOWER",   hex: "#00DFFF", w: 520, h: 460, ent: 3, roof: [[0.2, "ventbox"], [0.5, "condenser"], [0.82, "tank"]] },
@@ -2076,7 +2076,7 @@
         ctx.save();
         if (op.sitting) {
             var sitH = 32 * K;
-            var sitY = gy - 36 * K;
+            var sitY = gy - 38 * K;
             var sx = op.x - w / 2;
 
             ctx.fillStyle = "rgba(0,0,0,0.4)";
