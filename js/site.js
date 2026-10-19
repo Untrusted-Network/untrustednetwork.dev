@@ -1237,7 +1237,7 @@
         var x = clamp(holdCall.x - w / 2, 12, Math.max(12, W - 12 - w)), y = S.gy - PROP_BOX.booth[1] * K - 14 - h;
         ctx.fillStyle = "rgba(3,3,9,0.9)"; ctx.fillRect(x, y, w, h);
         ctx.strokeStyle = opCol; ctx.lineWidth = 1; ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
-        ctx.fillStyle = opCol; ctx.textAlign = "left"; ctx.textBaseline = "middle";
+        ctx.fillStyle = "#FFFFFF"; ctx.textAlign = "left"; ctx.textBaseline = "middle";
         ctx.fillText(text, x + 10, y + h / 2 + 1);
         ctx.restore();
     }
@@ -2075,9 +2075,8 @@
 
         ctx.save();
         if (op.sitting) {
-            var seatY = gy - 18 * K;
-            var sitH = 24 * K;
-            var sitY = seatY - sitH;
+            var sitH = 30 * K;
+            var sitY = gy - sitH;
             var sx = op.x - w / 2;
 
             ctx.fillStyle = "rgba(0,0,0,0.4)";
@@ -2089,13 +2088,11 @@
             roundRect(ctx, sx, sitY, w, sitH, 4 * K);
             ctx.fill();
 
-            ctx.fillRect(op.dir > 0 ? sx + 6 * K : sx + 2 * K, seatY, 14 * K, 10 * K);
-
             ctx.shadowBlur = 0;
             ctx.fillStyle = "#FFFFFF";
             var es = 3.5 * K, ex = op.x + op.dir * 3 * K;
-            ctx.fillRect(ex - 6 * K, sitY + 6.5 * K, es, es);
-            ctx.fillRect(ex + 2.5 * K, sitY + 6.5 * K, es, es);
+            ctx.fillRect(ex - 6 * K, sitY + 8 * K, es, es);
+            ctx.fillRect(ex + 2.5 * K, sitY + 8 * K, es, es);
         } else {
             var x = op.x - w / 2, y = gy - h - op.jumpY;
             var shadowScale = Math.max(0.25, 1 - shadowDist / (140 * K));
@@ -2351,12 +2348,12 @@
         var cone = S.cam ? drawCamera(t) : null;
         drawScrubber(t);
         drawPatrol(t);
+        drawBits(dt);
         drawOperator();
         drawDrone();
         if (cone && S.cam && !camIsDown(t)) {
             drawCameraBeamWash(t, cone);
         }
-        drawBits(dt);
         drawFloats(t);
         drawHold(t);
         drawScan(t);
