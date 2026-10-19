@@ -2075,8 +2075,8 @@
 
         ctx.save();
         if (op.sitting) {
-            var sitH = 30 * K;
-            var sitY = gy - sitH;
+            var sitH = 32 * K;
+            var sitY = gy - 36 * K;
             var sx = op.x - w / 2;
 
             ctx.fillStyle = "rgba(0,0,0,0.4)";
@@ -2091,8 +2091,8 @@
             ctx.shadowBlur = 0;
             ctx.fillStyle = "#FFFFFF";
             var es = 3.5 * K, ex = op.x + op.dir * 3 * K;
-            ctx.fillRect(ex - 6 * K, sitY + 8 * K, es, es);
-            ctx.fillRect(ex + 2.5 * K, sitY + 8 * K, es, es);
+            ctx.fillRect(ex - 6 * K, sitY + 7.5 * K, es, es);
+            ctx.fillRect(ex + 2.5 * K, sitY + 7.5 * K, es, es);
         } else {
             var x = op.x - w / 2, y = gy - h - op.jumpY;
             var shadowScale = Math.max(0.25, 1 - shadowDist / (140 * K));

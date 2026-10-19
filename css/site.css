@@ -623,7 +623,7 @@ a:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
 .statement-masthead {
   display: flex;
   align-items: center;
-  gap: 34px;
+  gap: 48px;
   margin-bottom: 32px;
   padding-bottom: 32px;
   border-bottom: 1px solid #1c1f26;
@@ -644,24 +644,25 @@ a:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
 
 .statement-emblem {
   width: auto;
-  height: clamp(80px, 12vw, 105px);
-  max-width: 150px;
+  height: clamp(62px, 8.5vw, 78px);
+  max-width: 120px;
   object-fit: contain;
   flex-shrink: 0;
-  filter: drop-shadow(0 0 16px rgba(255, 26, 53, 0.55));
+  filter: drop-shadow(0 0 14px rgba(255, 26, 53, 0.55));
   transition: filter 0.2s;
 }
 
 .statement-emblem:hover {
-  filter: drop-shadow(0 0 22px rgba(255, 26, 53, 0.75));
+  filter: drop-shadow(0 0 20px rgba(255, 26, 53, 0.75));
 }
 
 .statement-wordmark {
-  height: clamp(50px, 7.5vw, 68px);
+  height: clamp(44px, 6.5vw, 58px);
   width: auto;
-  max-width: clamp(280px, 50vw, 420px);
+  max-width: clamp(260px, 46vw, 380px);
   object-fit: contain;
   flex-shrink: 1;
+  margin-left: 6px;
 }
 
 .statement-kicker {
