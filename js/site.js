@@ -10,7 +10,7 @@
         { text: "ATDT UNTRUSTEDNETWORK.DEV", typed: true },
         { text: "CONNECT 14400", typed: false },
         { text: "> MODE 0", typed: true },
-        { text: "Ready", typed: false }
+        { text: "Ready // [A/D RUN, W/SPACE JUMP]", typed: false }
     ];
     var BOOT_CHAR_MS = 26, BOOT_LINE_MS = 260;
     var booting = false;
@@ -274,7 +274,8 @@
     var TAG_ORDER = ["operator_mark", "intercept_mark", "crown", "glitch_eye", "offbook", "v8_crest", "bolt", "null_sig", "crimson_row", "arrow_up", "circuit", "stackrunners", "gridrot"];
     var TAG_MAX = 10, TAG_HALF = 18, TAG_TIME = 0.6;
 
-    var op = { x: 0, dir: 1, target: 0, wanderAt: 0, colour: 0 };
+    var op = { x: 0, dir: 1, target: 0, wanderAt: 0, colour: 0, jumpY: 0, vy: 0 };
+    var keys = { left: false, right: false };
     var drone = { x: 0, y: 0 };
     var tags = [], tagNext = 0, scan = null, camDownUntil = 0;
     var cars = [], patrol = null, patrolAt = PATROL.first, patrolCount = 0, scrubber = null, bits = [], floats = [];
@@ -1777,33 +1778,128 @@
     function camIsDown(t) { return t < camDownUntil; }
 
     function drawCamera(t) {
-        var cam = S.cam, gy = S.gy, drop = gy - cam.y, down = camIsDown(t);
-        var angle = down ? 0.95 : Math.sin(t * CAM.rate) * CAM.sweep, cone = null;
+        var cam = S.cam, gy = S.gy, down = camIsDown(t);
+        var angle = down ? -0.85 : Math.sin(t * CAM.rate) * CAM.sweep;
+        var aim = Math.PI / 2 - angle;
+        var lensX = cam.x + Math.cos(aim) * 16 * K;
+        var lensY = cam.y + Math.sin(aim) * 16 * K;
+        var drop = gy - lensY;
+        var cx = lensX + Math.tan(angle) * drop;
+        var hw = Math.tan(CAM.half) * drop;
+        var x1 = cx - hw, x2 = cx + hw;
+        var cone = down ? null : {
+            lensX: lensX,
+            lensY: lensY,
+            cx: cx,
+            gy: gy,
+            x1: Math.min(x1, x2),
+            x2: Math.max(x1, x2)
+        };
+
         ctx.save();
-        if (!down) {
-            var x1 = cam.x + Math.tan(angle - CAM.half) * drop;
-            var x2 = cam.x + Math.tan(angle + CAM.half) * drop;
-            ctx.fillStyle = seen ? "rgba(255,0,0,0.22)" : "rgba(255,0,0,0.12)";
-            ctx.strokeStyle = "rgba(255,40,40,0.35)";
-            ctx.lineWidth = 1;
+        // 1. Background sweep cone & floor landing ellipse
+        if (cone) {
+            ctx.fillStyle = seen ? "rgba(255, 0, 0, 0.32)" : "rgba(255, 0, 0, 0.14)";
             ctx.beginPath();
-            ctx.moveTo(cam.x, cam.y); ctx.lineTo(x1, gy); ctx.lineTo(x2, gy);
-            ctx.closePath(); ctx.fill(); ctx.stroke();
-            cone = { x1: Math.min(x1, x2), x2: Math.max(x1, x2) };
+            ctx.ellipse(cx, gy, hw, 3.5 * K, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = seen ? "rgba(255, 60, 60, 0.45)" : "rgba(255, 40, 40, 0.22)";
+            ctx.lineWidth = 1;
+            ctx.stroke();
+
+            var bgGrd = ctx.createLinearGradient(lensX, lensY, cx, gy);
+            bgGrd.addColorStop(0, seen ? "rgba(255, 30, 30, 0.24)" : "rgba(255, 30, 30, 0.12)");
+            bgGrd.addColorStop(0.7, seen ? "rgba(255, 10, 10, 0.16)" : "rgba(255, 10, 10, 0.06)");
+            bgGrd.addColorStop(1, seen ? "rgba(255, 0, 0, 0.08)" : "rgba(255, 0, 0, 0.02)");
+            ctx.fillStyle = bgGrd;
+            ctx.beginPath();
+            ctx.moveTo(lensX, lensY);
+            ctx.lineTo(x1, gy);
+            ctx.lineTo(x2, gy);
+            ctx.closePath();
+            ctx.fill();
         }
+
+        // 2. Wall mount bracket on the building facade
         ctx.strokeStyle = CAM.edge;
-        ctx.lineWidth = 2;
-        line(ctx, cam.x, cam.y - 12 * K, cam.x, cam.y);
+        ctx.lineWidth = 2 * K;
+        ctx.fillStyle = "#111116";
+        ctx.fillRect(cam.x - 4 * K, cam.y - 14 * K, 8 * K, 4 * K);
+        ctx.strokeRect(cam.x - 4 * K, cam.y - 14 * K, 8 * K, 4 * K);
+        line(ctx, cam.x, cam.y - 10 * K, cam.x, cam.y);
+        ctx.fillStyle = "#050508";
+        ctx.beginPath();
+        ctx.arc(cam.x, cam.y, 2.5 * K, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        // 3. Camera head (synced from HTML5 - Game - Vector: city_heat.js:312)
         ctx.translate(cam.x, cam.y);
-        ctx.rotate(-angle);
+        ctx.rotate(aim);
         ctx.fillStyle = CAM.body;
-        ctx.lineWidth = 1.5;
-        ctx.fillRect(-5 * K, -4 * K, 10 * K, 18 * K);
-        ctx.strokeRect(-5 * K, -4 * K, 10 * K, 18 * K);
-        ctx.fillStyle = down ? "#3a0000" : CAM.eye;
-        ctx.fillRect(-2 * K, 12 * K, 4 * K, 3 * K);
+        ctx.strokeStyle = CAM.edge;
+        ctx.lineWidth = 1.2 * K;
+        ctx.fillRect(-4 * K, -5 * K, 17 * K, 10 * K);
+        ctx.strokeRect(-4 * K, -5 * K, 17 * K, 10 * K);
+        // Hood at front
+        ctx.beginPath();
+        ctx.moveTo(13 * K, -5 * K);
+        ctx.lineTo(18 * K, -7 * K);
+        ctx.lineTo(18 * K, 7 * K);
+        ctx.lineTo(13 * K, 5 * K);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        // Red optical lens eye
+        var eyeCol = down ? "#3a0000" : (seen ? "#FF0000" : "#FF2222");
+        ctx.fillStyle = eyeCol;
+        if (!down) {
+            ctx.shadowBlur = (seen ? 8 : 4) * DPR;
+            ctx.shadowColor = "#FF0000";
+        }
+        ctx.beginPath();
+        ctx.arc(16 * K, 0, 2.2 * K, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
         ctx.restore();
         return cone;
+    }
+
+    // Volumetric foreground pass: washes over operator, companion drone, and patrol drones
+    function drawCameraBeamWash(t, cone) {
+        if (!cone) return;
+        ctx.save();
+        var fgGrd = ctx.createLinearGradient(cone.lensX, cone.lensY, cone.cx, cone.gy);
+        var a0 = seen ? 0.28 : 0.12;
+        var a1 = seen ? 0.36 : 0.16;
+        fgGrd.addColorStop(0, "rgba(255, 40, 40, " + a0 + ")");
+        fgGrd.addColorStop(0.65, "rgba(255, 10, 10, " + a1 + ")");
+        fgGrd.addColorStop(1, "rgba(255, 0, 0, " + (a1 * 0.7) + ")");
+        ctx.fillStyle = fgGrd;
+        ctx.beginPath();
+        ctx.moveTo(cone.lensX, cone.lensY);
+        ctx.lineTo(cone.x1, cone.gy);
+        ctx.lineTo(cone.x2, cone.gy);
+        ctx.closePath();
+        ctx.fill();
+
+        // Cone scan boundary edges
+        ctx.strokeStyle = seen ? "rgba(255, 90, 90, 0.45)" : "rgba(255, 50, 50, 0.22)";
+        ctx.lineWidth = 1;
+        line(ctx, cone.lensX, cone.lensY, cone.x1, cone.gy);
+        line(ctx, cone.lensX, cone.lensY, cone.x2, cone.gy);
+
+        // Active surveillance scanline cutting across the cone
+        var scanProg = ((t * 1.5) % 1);
+        var scanY = cone.lensY + scanProg * (cone.gy - cone.lensY);
+        var slx = cone.lensX + (cone.x1 - cone.lensX) * scanProg;
+        var srx = cone.lensX + (cone.x2 - cone.lensX) * scanProg;
+        ctx.strokeStyle = seen ? "rgba(255, 150, 150, 0.65)" : "rgba(255, 80, 80, 0.3)";
+        ctx.lineWidth = 1.2;
+        line(ctx, slx, scanY, srx, scanY);
+        ctx.restore();
     }
 
     // The game's street tags (GRAFFITI_STYLES in city_graffiti.js), each drawn inside +/-s, with the
@@ -1953,10 +2049,11 @@
     }
 
     function drawOperator() {
-        var gy = S.gy, w = OP.w * K, h = OP.h * K, x = op.x - w / 2, y = gy - h, col = OP_COLOURS[op.colour];
+        var gy = S.gy, w = OP.w * K, h = OP.h * K, x = op.x - w / 2, y = gy - h - op.jumpY, col = OP_COLOURS[op.colour];
         ctx.save();
-        ctx.fillStyle = "rgba(0,0,0,0.45)";
-        ctx.fillRect(x - 2 * K, gy, w + 4 * K, 3);
+        var shadowScale = Math.max(0.25, 1 - op.jumpY / (140 * K));
+        ctx.fillStyle = "rgba(0,0,0," + (0.45 * shadowScale).toFixed(3) + ")";
+        ctx.fillRect(x - 2 * K + (w * (1 - shadowScale) * 0.5), gy, (w + 4 * K) * shadowScale, 3);
         ctx.shadowColor = rgba(col, 0.6);
         ctx.shadowBlur = 12 * DPR;
         ctx.fillStyle = col;
@@ -2054,17 +2151,39 @@
     }
 
     function update(t, dt) {
-        // Follows the pointer while there is one; otherwise it wanders.
-        if (!pointerIn && t - lastPointer > 4 && t > op.wanderAt) {
-            op.target = 40 + Math.random() * (W - 80);
-            op.wanderAt = t + 3 + Math.random() * 4;
+        // Keyboard movement overrides wandering/pointer while active
+        if (keys.left || keys.right) {
+            var moveDir = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
+            if (moveDir !== 0) {
+                op.dir = moveDir;
+                op.x = clamp(op.x + moveDir * OP.speed * K * dt * 1.35, 20, W - 20);
+                op.target = op.x;
+                lastPointer = t;
+            }
+        } else {
+            // Follows the pointer while there is one; otherwise it wanders.
+            if (!pointerIn && t - lastPointer > 4 && t > op.wanderAt) {
+                op.target = 40 + Math.random() * (W - 80);
+                op.wanderAt = t + 3 + Math.random() * 4;
+            }
+            var dx = op.target - op.x;
+            if (Math.abs(dx) > 4) {
+                op.dir = dx > 0 ? 1 : -1;
+                op.x += op.dir * Math.min(Math.abs(dx), OP.speed * K * dt);
+            }
         }
-        var dx = op.target - op.x;
-        if (Math.abs(dx) > 4) {
-            op.dir = dx > 0 ? 1 : -1;
-            op.x += op.dir * Math.min(Math.abs(dx), OP.speed * K * dt);
+
+        // Jump physics
+        if (op.jumpY > 0 || op.vy !== 0) {
+            op.jumpY += -op.vy * dt;
+            op.vy += 880 * K * dt;
+            if (op.jumpY <= 0) {
+                op.jumpY = 0;
+                op.vy = 0;
+            }
         }
-        var tx = op.x - op.dir * 24 * K, ty = S.gy - (OP.h + 24) * K + Math.sin(t * 2.2) * 3 * K;
+
+        var tx = op.x - op.dir * 24 * K, ty = S.gy - (OP.h + 24) * K - op.jumpY * 0.35 + Math.sin(t * 2.2) * 3 * K;
         var f = Math.min(1, dt * 5);
         drone.x += (tx - drone.x) * f;
         drone.y += (ty - drone.y) * f;
@@ -2107,6 +2226,9 @@
         drawPatrol(t);
         drawOperator();
         drawDrone();
+        if (cone && S.cam && !camIsDown(t)) {
+            drawCameraBeamWash(t, cone);
+        }
         drawBits(dt);
         drawFloats(t);
         drawHold(t);
@@ -2115,32 +2237,130 @@
         return cone;
     }
 
-    // ─── The tune ──────────────────────────────────────────────────────────
-    // js/streetmusic.js plays it: the game's own Lower Streets music, composed as it goes. It starts
-    // only when the button is pressed (browsers allow nothing sooner), and its tension follows the heat.
+    // ─── The tune & Volume Controls ────────────────────────────────────────
+    // js/streetmusic.js plays it: the game's own Lower Streets music, composed as it goes.
+    // Tension follows the Overwatch heat meter (15, 45, 80).
     var soundBtn = document.getElementById("sound");
+    var soundCtrl = document.getElementById("soundCtrl");
+    var soundVol = document.getElementById("soundVol");
+    var soundPct = document.getElementById("soundPct");
     var player = (window.StreetMusic && (window.AudioContext || window.webkitAudioContext))
         ? window.StreetMusic.create({ volume: 0.6 }) : null;
+    var currentVolume = 0.6;
+    var audioInitiated = false;
 
     // A short blip for the things that answer a click, while the sound is on.
     function sfx(freq, slideTo, dur, type) { if (player) player.blip(freq, slideTo, dur, type); }
     // A burst of filtered noise: a spray can, a rattle, rushing water.
     function hiss(seconds, type, freq, vol) { if (player) player.hiss(seconds, type, freq, vol); }
 
-    if (soundBtn) {
-        if (!player) soundBtn.hidden = true;
-        soundBtn.addEventListener("click", function () {
-            if (!player) return;
-            var on = player.toggle();
+    function updateAudioUI(on, vol) {
+        if (soundBtn) {
             soundBtn.setAttribute("aria-pressed", on ? "true" : "false");
             soundBtn.textContent = on ? "Sound: on" : "Sound: off";
+        }
+        if (soundCtrl) {
+            soundCtrl.classList.toggle("active", on);
+        }
+        if (soundVol) {
+            soundVol.value = vol;
+        }
+        if (soundPct) {
+            soundPct.textContent = Math.round(vol * 100) + "%";
+        }
+    }
+
+    function initAudio() {
+        if (!player || audioInitiated) return;
+        audioInitiated = true;
+        player.start();
+        player.setVolume(currentVolume);
+        sfx(440, 880, 0.12, "square");
+        updateAudioUI(true, currentVolume);
+    }
+
+    if (soundBtn) {
+        if (!player && soundCtrl) soundCtrl.hidden = true;
+        soundBtn.addEventListener("click", function () {
+            if (!player) return;
+            if (!audioInitiated) {
+                initAudio();
+                return;
+            }
+            var on = player.toggle();
+            if (on && currentVolume === 0) {
+                currentVolume = 0.6;
+                player.setVolume(currentVolume);
+            }
+            updateAudioUI(on, on ? currentVolume : 0);
         });
+
         // nothing plays to a tab nobody is looking at
         document.addEventListener("visibilitychange", function () {
             if (!player) return;
             if (document.hidden) player.pause(); else player.resume();
         });
     }
+
+    if (soundVol) {
+        soundVol.addEventListener("input", function () {
+            var v = parseFloat(soundVol.value) || 0;
+            currentVolume = v;
+            if (soundPct) soundPct.textContent = Math.round(v * 100) + "%";
+            if (!player) return;
+            if (!audioInitiated && v > 0) {
+                initAudio();
+                return;
+            }
+            player.setVolume(v);
+            if (v === 0 && player.isPlaying()) {
+                player.stop();
+                updateAudioUI(false, 0);
+            } else if (v > 0 && !player.isPlaying()) {
+                player.start();
+                player.setVolume(v);
+                updateAudioUI(true, v);
+            }
+        });
+    }
+
+    function isTypingInput() {
+        var el = document.activeElement;
+        if (!el) return false;
+        var tag = el.tagName ? el.tagName.toUpperCase() : "";
+        return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el.isContentEditable;
+    }
+
+    // Keyboard movement listeners (A/D run, W/Space jump) with input guard
+    window.addEventListener("keydown", function (e) {
+        if (isTypingInput()) return;
+        var code = e.code || e.key;
+        if (!audioInitiated && (code === "Space" || code === "KeyW" || code === "KeyA" || code === "KeyD" || code === "ArrowLeft" || code === "ArrowRight" || code === "ArrowUp")) {
+            initAudio();
+        }
+        if (code === "KeyA" || code === "ArrowLeft") {
+            keys.left = true;
+        } else if (code === "KeyD" || code === "ArrowRight") {
+            keys.right = true;
+        } else if (code === "KeyW" || code === "ArrowUp" || code === "Space") {
+            if (op.jumpY === 0 && op.vy === 0) {
+                op.vy = -340 * K;
+                op.jumpY = 1;
+                sfx(440, 720, 0.09, "square");
+            }
+            if (code === "Space") e.preventDefault();
+        }
+    });
+
+    window.addEventListener("keyup", function (e) {
+        if (isTypingInput()) return;
+        var code = e.code || e.key;
+        if (code === "KeyA" || code === "ArrowLeft") {
+            keys.left = false;
+        } else if (code === "KeyD" || code === "ArrowRight") {
+            keys.right = false;
+        }
+    });
 
     // ─── Things that answer a click ────────────────────────────────────────
     // Nothing marks them (the game's rule for secrets). The operator changes colour, and the page's
@@ -2292,15 +2512,18 @@
 
         var point = function (e) {
             var r = canvas.getBoundingClientRect(), px = clamp(e.clientX - r.left, 20, W - 20);
-            // Close to the operator it stops where it is: turning to face the pointer would swing the
-            // drone round to its other side, away from the click.
             op.target = Math.abs(px - op.x) < OP.still * K ? op.x : px;
             lastPointer = now();
-            pointerIn = e.pointerType !== "touch";
+            pointerIn = true;
         };
         hero.addEventListener("pointermove", point);
-        hero.addEventListener("pointerdown", point);
-        hero.addEventListener("pointerleave", function () { pointerIn = false; });
+        hero.addEventListener("pointerdown", function (e) {
+            point(e);
+            if (!audioInitiated) initAudio();
+        });
+        hero.addEventListener("pointerleave", function (e) {
+            if (e.pointerType !== "touch") pointerIn = false;
+        });
         canvas.addEventListener("click", onClick);
 
         var last = 0, rafId = 0, heroVisible = true;
@@ -2325,8 +2548,8 @@
         rafId = requestAnimationFrame(loop);
     }
 
-    // Wishlist / release dispatch form: posts to data-endpoint when configured, or falls back to
-    // addressing modezero@untrustednetwork.dev so the form works on a static host out of the box.
+    // Wishlist / release dispatch form: posts to data-endpoint when configured, buffers locally,
+    // and falls back to addressing modezero@untrustednetwork.dev without data loss.
     var wishForm = document.getElementById("wishlistForm");
     var wishInput = document.getElementById("wishlistEmail");
     var wishNote = document.getElementById("wishlistNote");
@@ -2335,6 +2558,12 @@
             e.preventDefault();
             var email = (wishInput.value || "").replace(/^\s+|\s+$/g, "");
             if (!email) return;
+            try {
+                var queue = JSON.parse(localStorage.getItem("untrusted_wishlist_queue") || "[]");
+                if (queue.indexOf(email) === -1) { queue.push(email); }
+                localStorage.setItem("untrusted_wishlist_queue", JSON.stringify(queue));
+            } catch (err) {}
+
             var endpoint = wishForm.getAttribute("data-endpoint");
             sfx(520, 880, 0.12);
             if (endpoint) {
@@ -2356,7 +2585,7 @@
                 window.location.href = "mailto:modezero@untrustednetwork.dev?subject="
                     + encodeURIComponent("[MODE-ZERO] Wishlist")
                     + "&body=" + encodeURIComponent("Notify me when [MODE-ZERO] launches:\n" + email);
-                wishNote.textContent = "DISPATCH READY // SEND TO MODEZERO@UNTRUSTEDNETWORK.DEV.";
+                wishNote.textContent = "DISPATCH BUFFERED // SEND TO MODEZERO@UNTRUSTEDNETWORK.DEV.";
             }
         });
     }

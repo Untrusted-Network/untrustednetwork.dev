@@ -41,10 +41,42 @@
   <link rel="canonical" href="https://untrustednetwork.dev/">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;600&display=swap" rel="stylesheet">
   <link rel="preload" href="fonts/cyber.ttf" as="font" type="font/ttf" crossorigin>
-  <link rel="stylesheet" href="css/site.css?v=20261016c">
+  <link rel="stylesheet" href="css/site.css?v=20261019a">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "Organization",
+        "@id": "https://untrustednetwork.dev/#organization",
+        "name": "Untrusted Network",
+        "url": "https://untrustednetwork.dev/",
+        "logo": "https://untrustednetwork.dev/og.png",
+        "sameAs": [
+          "https://bsky.app/profile/untrustednetwork.bsky.social",
+          "https://www.youtube.com/@untrustednetworkdev",
+          "https://www.instagram.com/untrustednetworkdev",
+          "https://www.threads.net/@untrustednetworkdev"
+        ]
+      },
+      {
+        "@type": "VideoGame",
+        "@id": "https://untrustednetwork.dev/#game",
+        "name": "[MODE-ZERO]",
+        "url": "https://untrustednetwork.dev/",
+        "genre": ["Cyberpunk", "Action Platformer", "Stealth", "Sandbox"],
+        "gamePlatform": ["PC", "Windows", "Linux"],
+        "applicationCategory": "Game",
+        "description": "A side-on cyberpunk platformer set in Nullgrid, a city Keystone built and Overwatch watches.",
+        "publisher": { "@id": "https://untrustednetwork.dev/#organization" },
+        "author": { "@id": "https://untrustednetwork.dev/#organization" },
+        "inLanguage": "en-GB"
+      }
+    ]
+  }
+  </script>
 </head>
 <body>
   <main>
@@ -56,7 +88,13 @@
         <p class="brand">Untrusted Network</p>
         <div class="bar-right">
           <p class="status"><span class="dot" aria-hidden="true"></span>In development</p>
-          <button class="sound" id="sound" type="button" aria-pressed="false">Sound: off</button>
+          <div class="sound-ctrl" id="soundCtrl">
+            <button class="sound" id="sound" type="button" aria-pressed="false">Sound: off</button>
+            <div class="sound-vol-wrap" id="soundVolWrap" title="Synthesiser Volume">
+              <input class="sound-slider" id="soundVol" type="range" min="0" max="1" step="0.05" value="0.6" aria-label="Synthesiser Volume">
+              <span class="sound-pct" id="soundPct" aria-hidden="true">60%</span>
+            </div>
+          </div>
         </div>
       </header>
 
@@ -104,6 +142,49 @@
           <button class="wishlist-btn" type="submit">Notify me</button>
         </form>
         <p class="wishlist-note" id="wishlistNote" role="status" aria-live="polite"></p>
+      </div>
+
+      <div class="panel panel-channels" id="channels">
+        <h2>Channels &amp; Signals</h2>
+        <div class="channels-grid">
+          <a class="channel-link" href="https://bsky.app/profile/untrustednetwork.bsky.social" target="_blank" rel="noopener noreferrer">
+            <span class="channel-tag">Bluesky</span>
+            <span class="channel-handle">@untrustednetwork.bsky.social</span>
+          </a>
+          <a class="channel-link" href="https://www.youtube.com/@untrustednetworkdev" target="_blank" rel="noopener noreferrer">
+            <span class="channel-tag">YouTube</span>
+            <span class="channel-handle">@untrustednetworkdev</span>
+          </a>
+          <a class="channel-link" href="https://www.instagram.com/untrustednetworkdev" target="_blank" rel="noopener noreferrer">
+            <span class="channel-tag">Instagram</span>
+            <span class="channel-handle">@untrustednetworkdev</span>
+          </a>
+          <a class="channel-link" href="https://www.threads.net/@untrustednetworkdev" target="_blank" rel="noopener noreferrer">
+            <span class="channel-tag">Threads</span>
+            <span class="channel-handle">@untrustednetworkdev</span>
+          </a>
+          <a class="channel-link channel-statement-link" href="why-not-tiktok.html">
+            <span class="channel-tag channel-tag-statement">Statement</span>
+            <span class="channel-handle">Why we are not on TikTok &rarr;</span>
+          </a>
+        </div>
+
+        <div class="statement-banners-grid">
+          <div class="not-on-x-banner">
+            <div class="not-on-x-text">
+              <strong>Why Untrusted Network Is Not on X</strong>
+              <span>Our work is public. Our principles are not for sale.</span>
+            </div>
+            <a class="not-on-x-link" href="why-not-x.html">Read Statement &rarr;</a>
+          </div>
+          <div class="not-on-x-banner not-on-tiktok-banner">
+            <div class="not-on-x-text">
+              <strong>Why Untrusted Network Is Not on TikTok</strong>
+              <span>Compulsive design, youth wellbeing &amp; privacy principles.</span>
+            </div>
+            <a class="not-on-x-link" href="why-not-tiktok.html">Read Statement &rarr;</a>
+          </div>
+        </div>
       </div>
 
       <div class="panel">

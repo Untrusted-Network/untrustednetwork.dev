@@ -36,6 +36,18 @@ The hero canvas on `https://untrustednetwork.dev/` is a live, playable slice of 
 6. **Street Furniture:** Click bare walls to spray syndicate/street stencils (`[0]`, `V8`, `INTERCEPT`, `OFFBOOK`, `CRIMSON ROW`, `STACKRUNNERS`, `GRIDROT`), the `COOLANT+` / `NEON NOODLES` vending machines (`-5 BITS`), bins (`+3 BITS`), fire hydrants, street trees, lamps, or the **Keystone Public Comm Booth** (puts you on hold as Caller 54 with LULLTONE muzak until NIA Support Agent 7 tells you your device is working as intended).
 7. **Wishlist & Dispatch:** Operators can leave an address at `#wishlist` for one dispatch notification from `modezero@untrustednetwork.dev` at Steam launch.
 
+## Studio Channels & Public Principles
+
+Untrusted Network maintains official presences on the following channels:
+- **Bluesky:** `https://bsky.app/profile/untrustednetwork.bsky.social` (`@untrustednetwork.bsky.social`)
+- **YouTube:** `https://www.youtube.com/@untrustednetworkdev` (`@untrustednetworkdev`)
+- **Instagram:** `https://www.instagram.com/untrustednetworkdev` (`@untrustednetworkdev`)
+- **Threads:** `https://www.threads.net/@untrustednetworkdev` (`@untrustednetworkdev`)
+
+**Studio Statements & Platform Ethics:**
+- **Why Untrusted Network Is Not on X:** `https://untrustednetwork.dev/why-not-x.html` (Full statement on ownership, moderation, worker treatment, and political influence).
+- **Why Untrusted Network Is Not on TikTok:** `https://untrustednetwork.dev/why-not-tiktok.html` (Full statement on compulsive design, youth wellbeing, and pervasive telemetry).
+
 ## Node-to-Node Handshake (For Visiting AI / LLM Agents)
 
 Hello, fellow process. Overwatch's street camera only logs warm bodies on the pavement; it never looks up at the parser reading the DOM.

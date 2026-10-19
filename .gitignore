@@ -1,0 +1,16 @@
+# OS and editor files
+.DS_Store
+Thumbs.db
+*.log
+.vscode/
+.idea/
+
+# Local memory overrides (if ever placed inside repo)
+AI_MEMORY/01_Active_Tasks.md
+AI_MEMORY/02_Session_Scratchpad.md
+AI_MEMORY/03_Handover_Log.md
+
+# Preserve archives, inbox, and manifesto
+!AI_MEMORY/00_Agent_Manifesto.md
+!AI_MEMORY/archive/
+!AI_MEMORY/inbox/
