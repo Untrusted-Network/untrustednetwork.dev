@@ -202,7 +202,7 @@
     ];
     // The game's roof gear and how far each piece rises above the deck, in its pixels. One that would
     // reach the words above it gives way to one of the low pieces, or is left off.
-    var ROOF_H = { condenser: 38, junction: 52, array: 60, hut: 90, ventbox: 94, beacon: 134, tank: 140, dishbox: 144 };
+    var ROOF_H = { condenser: 38, junction: 52, array: 60, hut: 90, ventbox: 94, beacon: 126, tank: 134, dishbox: 138 };
     var ROOF_LOW = ["condenser", "array", "junction"];
     // the room kept above a roof, where the screen has it: enough for the tallest gadget planned for it
     function roofSpace(def) {
@@ -872,7 +872,7 @@
         // the comms mast: a bolted foot, a tubular mast with a strip of the building's light up it, guyed
         // to the deck, carrying sector panels, relay drums or a ring emitter, and a steady red light at its top
         beacon: function (c, hex, seed) {
-            var top = -92, v = seed % 3, col = rgba(hex, 0.9), lampY = top - 5;
+            var top = -86, v = seed % 3, col = rgba(hex, 0.9), lampY = top - 5;
             c.strokeStyle = GEAR.seam; c.lineWidth = 1;
             strokePath(c, [0, -58, -20, 0, 0, -58, 20, 0]);
             gearSteel(c, -13, -4, 26, 4);
@@ -993,7 +993,7 @@
         // the tank: a steel vessel on a braced stand, with flange bands, a sight glass lit in the building's
         // colour, a hatch and a vent, an outlet with its valve, a catwalk and a ladder
         tank: function (c, hex, seed) {
-            var w = 78, h = 80, legH = 26, hw = w / 2, capH = 12, sh = 10, tb = -5 - legH, ty = tb - h, steel = "#262a36";
+            var w = 78, h = 76, legH = 22, hw = w / 2, capH = 12, sh = 10, tb = -5 - legH, ty = tb - h, steel = "#262a36";
             var lit = rgba(hex, 0.85), faint = rgba(hex, 0.18), glow = rgba(hex, 1), k, y;
             c.fillStyle = steel; c.fillRect(-hw - 8, -5, w + 16, 5);                                    // grillage beam
             c.strokeStyle = faint; c.lineWidth = 1; line(c, -hw - 8, -4.5, hw + 8, -4.5);
@@ -2117,17 +2117,16 @@
         var c = ctx, x = drone.x, y = drone.y, col = "#19d3ff";
         c.save();
         var rollAngle = 0, rollOffX = 0, rollOffY = 0;
-        var faceDir = op.dir || 1;
         if (drone.barrelRollTimer > 0) {
             var prog = (60 - drone.barrelRollTimer) / 60;
             var circleAngle = prog * Math.PI * 2;
-            rollOffX = Math.sin(circleAngle) * 16 * faceDir * K;
-            // Arc upward into the sky above the operator, matching HTML5 game drone_cosmetics.js:160
-            rollOffY = -(1 - Math.cos(circleAngle)) * 18 * K;
-            rollAngle = circleAngle * faceDir;
+            rollOffX = Math.sin(circleAngle) * 16 * K;
+            rollOffY = (-Math.cos(circleAngle) * 16 + 16) * K;
+            rollAngle = circleAngle;
         }
         c.translate(x + rollOffX, y + rollOffY);
         c.rotate(rollAngle);
+        c.translate(-rollOffX, -rollOffY);
 
         // Wings
         c.strokeStyle = col; c.lineWidth = 1.5; c.lineJoin = "miter";
@@ -2303,7 +2302,7 @@
         if (drone.barrelRollTimer > 0) {
             drone.barrelRollTimer -= dt * 60;
             if (drone.barrelRollTimer < 0) drone.barrelRollTimer = 0;
-        } else if (Math.random() < 0.003) {
+        } else if (Math.random() < 0.0006) {
             drone.barrelRollTimer = 60;
         }
 
