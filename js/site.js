@@ -10,7 +10,7 @@
         { text: "ATDT UNTRUSTEDNETWORK.DEV", typed: true },
         { text: "CONNECT 14400", typed: false },
         { text: "> MODE 0", typed: true },
-        { text: "Ready // [A/D RUN, W/SPACE JUMP]", typed: false }
+        { text: "Ready", typed: false }
     ];
     var BOOT_CHAR_MS = 26, BOOT_LINE_MS = 260;
     var booting = false;
@@ -271,12 +271,12 @@
     var OP_COLOURS = ["#FF1493", "#00DFFF", "#39FF14", "#FF3E00", "#8A2BE2"];
     var HEAT = { rise: 34, fall: 14, grace: 1.2, tag: 20, cam: 30 };
     var SCAN = { range: 900, time: 0.7, show: 6 };
-    var TAG_ORDER = ["operator_mark", "intercept_mark", "crown", "glitch_eye", "offbook", "v8_crest", "bolt", "null_sig", "crimson_row", "arrow_up", "circuit", "stackrunners", "gridrot"];
+    var TAG_ORDER = ["operator_mark", "crown", "glitch_eye", "offbook", "v8_crest", "bolt", "null_sig", "crimson_row", "arrow_up", "circuit", "stackrunners", "gridrot"];
     var TAG_MAX = 10, TAG_HALF = 18, TAG_TIME = 0.6;
 
     var op = { x: 0, dir: 1, target: 0, wanderAt: 0, colour: 0, jumpY: 0, vy: 0 };
     var keys = { left: false, right: false };
-    var drone = { x: 0, y: 0 };
+    var drone = { x: 0, y: 0, barrelRollTimer: 0 };
     var tags = [], tagNext = 0, scan = null, camDownUntil = 0;
     var cars = [], patrol = null, patrolAt = PATROL.first, patrolCount = 0, scrubber = null, bits = [], floats = [];
     var arcadeOpenUntil = 0;        // while the arcade's door stands lit and its tune plays
@@ -1781,9 +1781,8 @@
         var cam = S.cam, gy = S.gy, down = camIsDown(t);
         var angle = down ? -0.85 : Math.sin(t * CAM.rate) * CAM.sweep;
         var aim = Math.PI / 2 - angle;
-        var armLen = 22 * K;
-        var lensX = cam.x + Math.cos(aim) * armLen;
-        var lensY = cam.y + Math.sin(aim) * armLen;
+        var lensX = cam.x + Math.cos(aim) * 16 * K;
+        var lensY = cam.y + Math.sin(aim) * 16 * K;
         var drop = gy - lensY;
         var cx = lensX + Math.tan(angle) * drop;
         var hw = Math.tan(CAM.half) * drop;
@@ -1838,136 +1837,49 @@
             line(ctx, lensX, lensY, x2, gy);
         }
 
-        // 2. Heavy industrial wall mount assembly on the arcade facade
-        // Baseplate bolted to the wall
-        ctx.fillStyle = "#12131a";
-        ctx.strokeStyle = "#5a6275";
-        ctx.lineWidth = 1.2 * K;
-        ctx.fillRect(cam.x - 7 * K, cam.y - 18 * K, 14 * K, 8 * K);
-        ctx.strokeRect(cam.x - 7 * K, cam.y - 18 * K, 14 * K, 8 * K);
-        // Corner mounting bolts
-        ctx.fillStyle = "#8a96a3";
-        ctx.fillRect(cam.x - 5.5 * K, cam.y - 16.5 * K, 1.5 * K, 1.5 * K);
-        ctx.fillRect(cam.x + 4 * K, cam.y - 16.5 * K, 1.5 * K, 1.5 * K);
-        ctx.fillRect(cam.x - 5.5 * K, cam.y - 12 * K, 1.5 * K, 1.5 * K);
-        ctx.fillRect(cam.x + 4 * K, cam.y - 12 * K, 1.5 * K, 1.5 * K);
-
-        // Power & data conduit pipe running up from wall plate
-        ctx.strokeStyle = "#252936";
-        ctx.lineWidth = 2.4 * K;
-        line(ctx, cam.x, cam.y - 28 * K, cam.x, cam.y - 18 * K);
-
-        // Angled cantilever arm down to the knuckle
+        // 2. Wall mount bracket (HTML5 - Game - Vector: city_heat.js:794)
         ctx.strokeStyle = CAM.edge;
-        ctx.lineWidth = 2.2 * K;
-        line(ctx, cam.x, cam.y - 10 * K, cam.x, cam.y);
+        ctx.lineWidth = 2 * K;
+        line(ctx, cam.x, cam.y - 12 * K, cam.x, cam.y - 4 * K);
 
-        // Swivel knuckle gimbal socket
-        ctx.fillStyle = "#1a1c24";
-        ctx.strokeStyle = "#6E6E6E";
-        ctx.lineWidth = 1.4 * K;
-        ctx.beginPath();
-        ctx.arc(cam.x, cam.y, 3.8 * K, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
-        // Inner pivot axle pin
-        ctx.fillStyle = "#0c0d12";
-        ctx.beginPath();
-        ctx.arc(cam.x, cam.y, 1.6 * K, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Drooping flexible data conduit entering back of camera
-        ctx.strokeStyle = "#08090d";
-        ctx.lineWidth = 1.4 * K;
-        ctx.beginPath();
-        ctx.moveTo(cam.x + 4 * K, cam.y - 10 * K);
-        ctx.quadraticCurveTo(cam.x + 8 * K, cam.y - 4 * K, cam.x + Math.cos(aim - Math.PI) * 6 * K, cam.y + Math.sin(aim - Math.PI) * 6 * K);
-        ctx.stroke();
-
-        // 3. Overwatch Surveillance Camera Head (rotates with aim)
+        // 3. Overwatch camera head (HTML5 - Game - Vector: city_heat.js:312)
         ctx.translate(cam.x, cam.y);
         ctx.rotate(aim);
-
-        // Rear heatsink cooling fins
-        ctx.fillStyle = "#12141c";
-        ctx.strokeStyle = "#444b5a";
-        ctx.lineWidth = 1 * K;
-        ctx.fillRect(-7 * K, -5 * K, 5 * K, 10 * K);
-        ctx.strokeRect(-7 * K, -5 * K, 5 * K, 10 * K);
-        ctx.strokeStyle = "#252936";
-        line(ctx, -5.5 * K, -4 * K, -5.5 * K, 4 * K);
-        line(ctx, -4 * K, -4 * K, -4 * K, 4 * K);
-
-        // Main camera chassis
-        ctx.fillStyle = "#08090e";
-        ctx.strokeStyle = CAM.edge;
-        ctx.lineWidth = 1.4 * K;
-        ctx.fillRect(-2 * K, -6.5 * K, 18 * K, 13 * K);
-        ctx.strokeRect(-2 * K, -6.5 * K, 18 * K, 13 * K);
-
-        // Armored chassis seam line
-        ctx.strokeStyle = "#252b38";
-        ctx.lineWidth = 1 * K;
-        line(ctx, 0, 0, 15 * K, 0);
-
-        // Weather shield & sun visor hood extending forward
-        ctx.fillStyle = "#0c0e14";
+        ctx.fillStyle = CAM.body;
         ctx.strokeStyle = CAM.edge;
         ctx.lineWidth = 1.2 * K;
+        ctx.fillRect(-4 * K, -5 * K, 17 * K, 10 * K);
+        ctx.strokeRect(-4 * K, -5 * K, 17 * K, 10 * K);
+        // Short hood
         ctx.beginPath();
-        ctx.moveTo(15 * K, -7 * K);
-        ctx.lineTo(25 * K, -9 * K);
-        ctx.lineTo(25 * K, -5 * K);
-        ctx.lineTo(21 * K, 6.5 * K);
-        ctx.lineTo(15 * K, 6 * K);
+        ctx.moveTo(13 * K, -5 * K);
+        ctx.lineTo(18 * K, -7 * K);
+        ctx.lineTo(18 * K, 7 * K);
+        ctx.lineTo(13 * K, 5 * K);
         ctx.closePath();
         ctx.fill();
         ctx.stroke();
 
-        // Side telemetry status LEDs
-        // Power LED: green
-        ctx.fillStyle = down ? "#102610" : "#39FF14";
-        ctx.fillRect(2 * K, -5 * K, 2 * K, 1.4 * K);
-        // Link REC LED: blinking red at 2.5Hz
-        var recBlink = (!down && Math.sin(t * 5) > 0);
-        ctx.fillStyle = down ? "#260000" : (recBlink ? "#FF1A35" : "#600");
-        ctx.fillRect(6 * K, -5 * K, 2 * K, 1.4 * K);
-
-        // Optical sensor assembly (recessed inside visor)
-        ctx.fillStyle = "#040507";
-        ctx.strokeStyle = "#1e2430";
-        ctx.lineWidth = 1 * K;
-        ctx.beginPath();
-        ctx.arc(19 * K, 0, 3.8 * K, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
-
-        // Glowing red optical pupil
-        var eyeCol = down ? "#260000" : (seen ? "#FF0033" : "#FF1E28");
-        ctx.fillStyle = eyeCol;
+        // Red optical eye
+        var col = down ? "#3a0000" : (seen ? "#FF0000" : "#FF2222");
+        ctx.fillStyle = col;
         if (!down) {
-            ctx.shadowBlur = (seen ? 14 : 7) * DPR;
+            ctx.shadowBlur = (seen ? 8 : 4) * DPR;
             ctx.shadowColor = "#FF0000";
         }
         ctx.beginPath();
-        ctx.arc(19 * K, 0, 2.6 * K, 0, Math.PI * 2);
+        ctx.arc(16 * K, 0, 2 * K, 0, Math.PI * 2);
         ctx.fill();
         ctx.shadowBlur = 0;
 
-        // Lens specular reflection
-        if (!down) {
-            ctx.fillStyle = "#ffffff";
-            ctx.fillRect(18.2 * K, -1.2 * K, 1.2 * K, 1.2 * K);
-        }
-
-        // Cracked visor line when camera is disabled
+        // Cracked housing when burnt out / disabled
         if (down) {
-            ctx.strokeStyle = "rgba(180, 200, 220, 0.75)";
-            ctx.lineWidth = 0.8 * K;
+            ctx.strokeStyle = "rgba(160, 160, 160, 0.6)";
+            ctx.lineWidth = 0.7 * K;
             ctx.beginPath();
-            ctx.moveTo(16 * K, -5 * K);
-            ctx.lineTo(20 * K, 0);
-            ctx.lineTo(18 * K, 5 * K);
+            ctx.moveTo(2 * K, -5 * K);
+            ctx.lineTo(5 * K, 0);
+            ctx.lineTo(3 * K, 5 * K);
             ctx.stroke();
         }
 
@@ -2170,24 +2082,60 @@
         ctx.restore();
     }
 
-    // The companion drone (drone_cosmetics.js): a round core with a green eye and a lift pod on each arm.
+    // The companion drone (drone_cosmetics.js): a round core with a green eye, lift pods, blinking, thruster flame, and barrel rolls.
     function drawDrone() {
         var c = ctx, x = drone.x, y = drone.y, col = "#19d3ff";
         c.save();
+        var rollAngle = 0, rollOffX = 0, rollOffY = 0;
+        if (drone.barrelRollTimer > 0) {
+            var prog = (60 - drone.barrelRollTimer) / 60;
+            var circleAngle = prog * Math.PI * 2;
+            rollOffX = Math.sin(circleAngle) * 16 * K;
+            rollOffY = -Math.cos(circleAngle) * 16 * K + 16 * K;
+            rollAngle = circleAngle;
+        }
+        c.translate(x + rollOffX, y + rollOffY);
+        c.rotate(rollAngle);
+
+        // Wings
         c.strokeStyle = col; c.lineWidth = 1.5; c.lineJoin = "miter";
-        c.beginPath(); c.arc(x, y, 6 * K, 0, Math.PI * 2); c.stroke();
-        line(c, x - 13 * K, y, x - 7 * K, y);
-        line(c, x + 7 * K, y, x + 13 * K, y);
+        line(c, -13 * K, 0, -7 * K, 0);
+        line(c, 7 * K, 0, 13 * K, 0);
+
+        // Lift pods on wings
         c.fillStyle = "#18122B"; c.lineWidth = Math.max(1, K);
         [-1, 1].forEach(function (dir) {
-            var px = x + dir * 12 * K;
-            pPath(c, [px - 3 * K, y - 3 * K, px + 3 * K, y - 3 * K, px + 3 * K, y + 1.5 * K, px + 1.5 * K, y + 3 * K, px - 1.5 * K, y + 3 * K, px - 3 * K, y + 1.5 * K], true);
+            var px = dir * 12 * K;
+            pPath(c, [px - 3 * K, -3 * K, px + 3 * K, -3 * K, px + 3 * K, 1.5 * K, px + 1.5 * K, 3 * K, px - 1.5 * K, 3 * K, px - 3 * K, 1.5 * K], true);
             c.fill(); c.stroke();
-            c.fillStyle = col; c.fillRect(px - 1.5 * K, y + 3.4 * K, 3 * K, 0.9 * K);
+            c.fillStyle = col; c.fillRect(px - 1.5 * K, 3.4 * K, 3 * K, 0.9 * K);
             c.fillStyle = "#18122B";
         });
-        c.fillStyle = "#39FF14";
-        c.beginPath(); c.arc(x, y, 2.5 * K, 0, Math.PI * 2); c.fill();
+
+        // Round central core body
+        c.strokeStyle = col;
+        c.fillStyle = "#18122B";
+        c.beginPath(); c.arc(0, 0, 6 * K, 0, Math.PI * 2); c.fill(); c.stroke();
+
+        // Central optical eye with periodic horizontal slit blinking (drone_city.js:310)
+        var blink = Math.floor(clock * 6) % 18 === 0;
+        c.strokeStyle = c.fillStyle = "#39FF14";
+        if (blink) {
+            c.lineWidth = 1.4 * K;
+            line(c, -2.6 * K, 0, 2.6 * K, 0);
+        } else {
+            c.beginPath(); c.arc(0, 0, 2.5 * K, 0, Math.PI * 2); c.fill();
+        }
+
+        // Thruster flame flicker underneath (drone_city.js:320)
+        var flameH = (3 + Math.sin(clock * 24) * 2) * K;
+        c.strokeStyle = "#FFB300"; c.lineWidth = 1 * K;
+        c.beginPath();
+        c.moveTo(-1.5 * K, 6.5 * K);
+        c.lineTo(0, 6.5 * K + flameH);
+        c.lineTo(1.5 * K, 6.5 * K);
+        c.stroke();
+
         c.restore();
     }
 
@@ -2254,25 +2202,29 @@
     }
 
     function update(t, dt) {
-        // Keyboard movement overrides wandering/pointer while active
+        // Keyboard movement overrides autonomous wandering while keys are pressed
         if (keys.left || keys.right) {
             var moveDir = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
             if (moveDir !== 0) {
                 op.dir = moveDir;
                 op.x = clamp(op.x + moveDir * OP.speed * K * dt * 1.35, 20, W - 20);
                 op.target = op.x;
-                lastPointer = t;
+                op.wanderAt = t + 2 + Math.random() * 2;
             }
         } else {
-            // Follows the pointer while there is one; otherwise it wanders.
-            if (!pointerIn && t - lastPointer > 4 && t > op.wanderAt) {
-                op.target = 40 + Math.random() * (W - 80);
-                op.wanderAt = t + 3 + Math.random() * 4;
+            // Autonomous wandering along the street when player is not controlling
+            if (t > op.wanderAt) {
+                if (Math.random() < 0.35) {
+                    op.wanderAt = t + 2 + Math.random() * 3;
+                } else {
+                    op.target = 40 + Math.random() * (W - 80);
+                    op.wanderAt = t + 4 + Math.random() * 6;
+                }
             }
             var dx = op.target - op.x;
             if (Math.abs(dx) > 4) {
                 op.dir = dx > 0 ? 1 : -1;
-                op.x += op.dir * Math.min(Math.abs(dx), OP.speed * K * dt);
+                op.x += op.dir * Math.min(Math.abs(dx), OP.speed * 0.55 * K * dt);
             }
         }
 
@@ -2284,6 +2236,15 @@
                 op.jumpY = 0;
                 op.vy = 0;
             }
+        }
+
+        // Drone barrel roll timer
+        if (drone.barrelRollTimer === undefined) drone.barrelRollTimer = 0;
+        if (drone.barrelRollTimer > 0) {
+            drone.barrelRollTimer -= dt * 60;
+            if (drone.barrelRollTimer < 0) drone.barrelRollTimer = 0;
+        } else if (Math.random() < 0.003) {
+            drone.barrelRollTimer = 60;
         }
 
         var tx = op.x - op.dir * 24 * K, ty = S.gy - (OP.h + 24) * K - op.jumpY * 0.35 + Math.sin(t * 2.2) * 3 * K;
@@ -2464,6 +2425,9 @@
                 sfx(440, 720, 0.09, "square");
             }
             if (code === "Space") e.preventDefault();
+        } else if (code === "KeyF") {
+            var faceDir = op.dir || 1;
+            sprayAt(op.x + faceDir * 12 * K, S.gy - OP.h * K * 0.7, clock);
         }
     });
 
@@ -2611,7 +2575,6 @@
                 break;
             }
         }
-        sprayAt(x, y, t);
     }
 
     function startScene() {
@@ -2640,15 +2603,11 @@
         if (REDUCE) { frame(0.9, 0); return; }
 
         var point = function (e) {
-            var r = canvas.getBoundingClientRect(), px = clamp(e.clientX - r.left, 20, W - 20);
-            op.target = Math.abs(px - op.x) < OP.still * K ? op.x : px;
             lastPointer = now();
             pointerIn = true;
         };
         hero.addEventListener("pointermove", point);
-        hero.addEventListener("pointerdown", function (e) {
-            point(e);
-        });
+        hero.addEventListener("pointerdown", point);
         hero.addEventListener("pointerleave", function (e) {
             if (e.pointerType !== "touch") pointerIn = false;
         });
