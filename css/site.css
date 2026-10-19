@@ -650,16 +650,14 @@ a:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
   flex-shrink: 0;
   padding: 6px 10px;
   background: #000000;
-  border: 1px solid rgba(255, 26, 53, 0.75);
   border-radius: 4px;
-  box-shadow: 0 0 14px rgba(255, 26, 53, 0.45);
+  box-shadow: 0 0 16px rgba(255, 26, 53, 0.6), 0 0 30px rgba(255, 26, 53, 0.25);
   box-sizing: border-box;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition: box-shadow 0.2s;
 }
 
 .statement-emblem:hover {
-  border-color: #ff1a35;
-  box-shadow: 0 0 20px rgba(255, 26, 53, 0.75);
+  box-shadow: 0 0 22px rgba(255, 26, 53, 0.8), 0 0 36px rgba(255, 26, 53, 0.4);
 }
 
 .statement-wordmark {
