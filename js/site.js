@@ -277,9 +277,9 @@
     var HEAT = { rise: 34, fall: 14, grace: 1.2, tag: 20, cam: 30 };
     var SCAN = { range: 900, time: 0.7, show: 6 };
     var TAG_ORDER = ["operator_mark", "crown", "glitch_eye", "offbook", "v8_crest", "bolt", "null_sig", "crimson_row", "arrow_up", "circuit", "stackrunners", "gridrot"];
-    var TAG_MAX = 10, TAG_HALF = 18, TAG_TIME = 0.6;
+    var TAG_MAX = 48, TAG_HALF = 18, TAG_TIME = 0.6;
 
-    var op = { x: 0, dir: 1, target: 0, wanderAt: 0, colour: 0, jumpY: 0, vy: 0 };
+    var op = { x: 0, dir: 1, target: 0, wanderAt: 0, colour: 0, jumpY: 0, vy: 0, sprayUntil: 0, sitting: false };
     var keys = { left: false, right: false };
     var drone = { x: 0, y: 0, barrelRollTimer: 0 };
     var tags = [], tagNext = 0, scan = null, camDownUntil = 0;
@@ -1230,13 +1230,14 @@
         if (!holdCall) return;
         if (t >= holdCall.until) { holdCall = null; return; }
         var text = holdCall.lines[Math.min(holdCall.lines.length - 1, Math.floor((t - holdCall.t0) / HOLD.each))];
+        var opCol = OP_COLOURS[op.colour];
         ctx.save();
         ctx.font = "600 " + Math.max(10, 10 * K).toFixed(1) + "px 'Source Code Pro', monospace";
         var tw = ctx.measureText(text).width, w = tw + 20, h = 22;
         var x = clamp(holdCall.x - w / 2, 12, Math.max(12, W - 12 - w)), y = S.gy - PROP_BOX.booth[1] * K - 14 - h;
         ctx.fillStyle = "rgba(3,3,9,0.9)"; ctx.fillRect(x, y, w, h);
-        ctx.strokeStyle = HOLD.col; ctx.lineWidth = 1; ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
-        ctx.fillStyle = HOLD.col; ctx.textAlign = "left"; ctx.textBaseline = "middle";
+        ctx.strokeStyle = opCol; ctx.lineWidth = 1; ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+        ctx.fillStyle = opCol; ctx.textAlign = "left"; ctx.textBaseline = "middle";
         ctx.fillText(text, x + 10, y + h / 2 + 1);
         ctx.restore();
     }
@@ -2051,22 +2052,66 @@
         });
     }
 
+    function getPropPlatform(x) {
+        if (!S || !S.props) return 0;
+        for (var i = 0; i < S.props.length; i++) {
+            var p = S.props[i];
+            if (p.kind === "cabinet" || p.kind === "booth" || p.kind === "vending") {
+                var box = PROP_BOX[p.kind];
+                var hw = (box[0] + 4) * K;
+                if (Math.abs(x - p.x) <= hw) {
+                    return box[1] * K;
+                }
+            }
+        }
+        return 0;
+    }
+
     function drawOperator() {
-        var gy = S.gy, w = OP.w * K, h = OP.h * K, x = op.x - w / 2, y = gy - h - op.jumpY, col = OP_COLOURS[op.colour];
+        var gy = S.gy, w = OP.w * K, h = OP.h * K, col = OP_COLOURS[op.colour];
+        var platH = getPropPlatform(op.x);
+        var shadowFloor = (platH > 0 && op.jumpY >= platH - 4 * K) ? gy - platH : gy;
+        var shadowDist = (platH > 0 && op.jumpY >= platH - 4 * K) ? (op.jumpY - platH) : op.jumpY;
+
         ctx.save();
-        var shadowScale = Math.max(0.25, 1 - op.jumpY / (140 * K));
-        ctx.fillStyle = "rgba(0,0,0," + (0.45 * shadowScale).toFixed(3) + ")";
-        ctx.fillRect(x - 2 * K + (w * (1 - shadowScale) * 0.5), gy, (w + 4 * K) * shadowScale, 3);
-        ctx.shadowColor = rgba(col, 0.6);
-        ctx.shadowBlur = 12 * DPR;
-        ctx.fillStyle = col;
-        roundRect(ctx, x, y, w, h, 4 * K);
-        ctx.fill();
-        ctx.shadowBlur = 0;
-        ctx.fillStyle = "#FFFFFF";
-        var ex = op.x + op.dir * 3 * K, es = 3.5 * K;
-        ctx.fillRect(ex - 6 * K, y + 9 * K, es, es);
-        ctx.fillRect(ex + 2.5 * K, y + 9 * K, es, es);
+        if (op.sitting) {
+            var seatY = gy - 18 * K;
+            var sitH = 24 * K;
+            var sitY = seatY - sitH;
+            var sx = op.x - w / 2;
+
+            ctx.fillStyle = "rgba(0,0,0,0.4)";
+            ctx.fillRect(sx - 2 * K, gy, w + 4 * K, 3);
+
+            ctx.shadowColor = rgba(col, 0.6);
+            ctx.shadowBlur = 12 * DPR;
+            ctx.fillStyle = col;
+            roundRect(ctx, sx, sitY, w, sitH, 4 * K);
+            ctx.fill();
+
+            ctx.fillRect(op.dir > 0 ? sx + 6 * K : sx + 2 * K, seatY, 14 * K, 10 * K);
+
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = "#FFFFFF";
+            var es = 3.5 * K, ex = op.x + op.dir * 3 * K;
+            ctx.fillRect(ex - 6 * K, sitY + 6.5 * K, es, es);
+            ctx.fillRect(ex + 2.5 * K, sitY + 6.5 * K, es, es);
+        } else {
+            var x = op.x - w / 2, y = gy - h - op.jumpY;
+            var shadowScale = Math.max(0.25, 1 - shadowDist / (140 * K));
+            ctx.fillStyle = "rgba(0,0,0," + (0.45 * shadowScale).toFixed(3) + ")";
+            ctx.fillRect(x - 2 * K + (w * (1 - shadowScale) * 0.5), shadowFloor, (w + 4 * K) * shadowScale, 3);
+            ctx.shadowColor = rgba(col, 0.6);
+            ctx.shadowBlur = 12 * DPR;
+            ctx.fillStyle = col;
+            roundRect(ctx, x, y, w, h, 4 * K);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = "#FFFFFF";
+            var ex = op.x + op.dir * 3 * K, es = 3.5 * K;
+            ctx.fillRect(ex - 6 * K, y + 9 * K, es, es);
+            ctx.fillRect(ex + 2.5 * K, y + 9 * K, es, es);
+        }
         ctx.restore();
     }
 
@@ -2075,12 +2120,14 @@
         var c = ctx, x = drone.x, y = drone.y, col = "#19d3ff";
         c.save();
         var rollAngle = 0, rollOffX = 0, rollOffY = 0;
+        var faceDir = op.dir || 1;
         if (drone.barrelRollTimer > 0) {
             var prog = (60 - drone.barrelRollTimer) / 60;
             var circleAngle = prog * Math.PI * 2;
-            rollOffX = Math.sin(circleAngle) * 16 * K;
-            rollOffY = -Math.cos(circleAngle) * 16 * K + 16 * K;
-            rollAngle = circleAngle;
+            rollOffX = Math.sin(circleAngle) * 16 * faceDir * K;
+            // Arc upward into the sky above the operator, matching HTML5 game drone_cosmetics.js:160
+            rollOffY = -(1 - Math.cos(circleAngle)) * 18 * K;
+            rollAngle = circleAngle * faceDir;
         }
         c.translate(x + rollOffX, y + rollOffY);
         c.rotate(rollAngle);
@@ -2190,6 +2237,21 @@
     }
 
     function update(t, dt) {
+        if (op.sitting) {
+            op.vy = 0;
+            op.jumpY = 0;
+            op.wanderAt = t + 5;
+            // Companion drone gently hovers near seated operator
+            var stx = op.x - op.dir * 20 * K, sty = S.gy - (OP.h + 10) * K + Math.sin(t * 2.2) * 3 * K;
+            var sf = Math.min(1, dt * 5);
+            drone.x += (stx - drone.x) * sf;
+            drone.y += (sty - drone.y) * sf;
+            updateCars(dt);
+            updatePatrol(t, dt);
+            updateScrubber(t, dt);
+            return;
+        }
+
         // Keyboard movement overrides autonomous wandering while keys are pressed
         if (keys.left || keys.right) {
             var moveDir = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
@@ -2216,11 +2278,24 @@
             }
         }
 
-        // Jump physics
+        // Platform detection and jump physics
+        var platH = getPropPlatform(op.x);
+        var prevY = op.jumpY;
+
+        // Walking off a prop top causes gravity to take over
+        if (op.vy === 0 && op.jumpY > 0 && platH === 0) {
+            op.vy = 20 * K;
+        }
+
         if (op.jumpY > 0 || op.vy !== 0) {
             op.jumpY += -op.vy * dt;
             op.vy += 880 * K * dt;
-            if (op.jumpY <= 0) {
+
+            // Check landing on platform top vs ground
+            if (platH > 0 && op.vy >= 0 && prevY >= platH - 8 * K && op.jumpY <= platH) {
+                op.jumpY = platH;
+                op.vy = 0;
+            } else if (op.jumpY <= 0) {
                 op.jumpY = 0;
                 op.vy = 0;
             }
@@ -2398,24 +2473,80 @@
         return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el.isContentEditable;
     }
 
-    // Keyboard movement listeners (A/D run, W/Space jump) with input guard
+    function handleKeyE(t) {
+        if (op.sitting) {
+            op.sitting = false;
+            sfx(320, 480, 0.08, "sine");
+            return;
+        }
+        // 1. Bench seating: sit down if near a bench
+        for (var b = 0; b < S.props.length; b++) {
+            var bp = S.props[b];
+            if (bp.kind === "bench" && Math.abs(op.x - bp.x) <= 36 * K && op.jumpY < 12 * K) {
+                op.sitting = true;
+                op.x = bp.x;
+                op.vy = 0;
+                op.jumpY = 0;
+                keys.left = false;
+                keys.right = false;
+                sfx(480, 320, 0.08, "sine");
+                return;
+            }
+        }
+        // 2. Pixel Arcade door: open/close door and play/stop chiptune
+        if (S.arcade && Math.abs(op.x - (S.arcade.x + S.arcade.w / 2)) <= 38 * K && op.jumpY < 24 * K) {
+            toggleArcade(t);
+            return;
+        }
+        // 3. Interactive street furniture (comms booth, tree, hydrant, vending, bin)
+        var bestProp = null, bestDist = 1e9;
+        for (var i = 0; i < S.props.length; i++) {
+            var prop = S.props[i];
+            if (prop.kind === "bench") continue;
+            var box = PROP_BOX[prop.kind];
+            var dist = Math.abs(op.x - prop.x);
+            var reach = (box[0] + 24) * K;
+            if (dist <= reach && dist < bestDist) {
+                bestDist = dist;
+                bestProp = prop;
+            }
+        }
+        if (bestProp) {
+            useProp(bestProp, t);
+        }
+    }
+
+    // Keyboard movement listeners (A/D run, W/Space jump, F spray, E interact/sit)
     window.addEventListener("keydown", function (e) {
         if (isTypingInput()) return;
         var code = e.code || e.key;
         if (code === "KeyA" || code === "ArrowLeft") {
             keys.left = true;
+            if (op.sitting) op.sitting = false;
         } else if (code === "KeyD" || code === "ArrowRight") {
             keys.right = true;
+            if (op.sitting) op.sitting = false;
         } else if (code === "KeyW" || code === "ArrowUp" || code === "Space") {
-            if (op.jumpY === 0 && op.vy === 0) {
-                op.vy = -340 * K;
-                op.jumpY = 1;
-                sfx(440, 720, 0.09, "square");
+            if (op.sitting) {
+                op.sitting = false;
+            } else {
+                var platH = getPropPlatform(op.x);
+                var isGrounded = (op.jumpY === 0 || (platH > 0 && Math.abs(op.jumpY - platH) < 4 * K));
+                if (isGrounded && op.vy === 0) {
+                    op.vy = -390 * K;
+                    op.jumpY += 2 * K;
+                    sfx(440, 720, 0.09, "square");
+                }
             }
             if (code === "Space") e.preventDefault();
         } else if (code === "KeyF") {
+            if (clock < (op.sprayUntil || 0)) return;
+            op.sprayUntil = clock + TAG_TIME;
+            if (op.sitting) op.sitting = false;
             var faceDir = op.dir || 1;
-            sprayAt(op.x + faceDir * 12 * K, S.gy - OP.h * K * 0.7, clock);
+            sprayAt(op.x + faceDir * 12 * K, S.gy - op.jumpY - OP.h * K * 0.7, clock);
+        } else if (code === "KeyE") {
+            handleKeyE(clock);
         }
     });
 
