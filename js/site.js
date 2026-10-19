@@ -21,7 +21,7 @@
         var cursor = document.createElement("span");
         cursor.className = "cursor";
         var done = function () {
-            el.textContent = BOOT.map(function (l) { return l.text; }).join("\n") + "\n";
+            el.textContent = BOOT.map(function (l) { return l.text; }).join("\n") + " ";
             el.appendChild(cursor);
             hero.classList.remove("booting");
             booting = false;
@@ -45,7 +45,12 @@
                 return;
             }
             if (!line.typed) out += line.text;
-            out += "\n"; li++; ci = 0;
+            if (li < BOOT.length - 1) {
+                out += "\n";
+            } else {
+                out += " ";
+            }
+            li++; ci = 0;
             paint();
             setTimeout(step, BOOT_LINE_MS);
         };

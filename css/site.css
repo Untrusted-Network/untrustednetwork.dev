@@ -238,8 +238,8 @@ a:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
 .boot {
   width: max-content;
   max-width: 100%;
-  /* five lines: the four boot lines and the cursor's, so the block never grows as it types */
-  min-height: 7em;
+  /* four lines: the boot lines and inline cursor */
+  min-height: 5.6em;
   font-family: var(--mono);
   font-size: 13px;
   line-height: 1.4;
@@ -263,7 +263,7 @@ a:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
   /* As wide as its own text or canvas, so the reveal's clip never cuts the title short. */
   position: relative;
   width: max-content;
-  margin-top: 10px;
+  margin-top: 6px;
   font-family: var(--display);
   font-weight: 700;
   font-size: clamp(2.1rem, min(8.5vw, 11vh), 5.5rem);
@@ -620,9 +620,9 @@ a:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
 .statement-masthead {
   display: flex;
   align-items: center;
-  gap: 22px;
+  gap: 34px;
   margin-bottom: 32px;
-  padding-bottom: 24px;
+  padding-bottom: 32px;
   border-bottom: 1px solid #1c1f26;
   position: relative;
 }
@@ -645,7 +645,6 @@ a:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
   max-width: 120px;
   object-fit: contain;
   flex-shrink: 0;
-  filter: drop-shadow(0 0 14px rgba(255, 26, 53, 0.5));
 }
 
 .statement-wordmark {
@@ -676,6 +675,11 @@ a:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
   text-wrap: balance;
 }
 
+.statement-title .no-break,
+.no-break {
+  white-space: nowrap;
+}
+
 .statement-lead {
   margin-top: 14px;
   font-family: var(--display);
@@ -685,6 +689,11 @@ a:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
   color: #ff1a35;
   font-weight: 600;
   text-wrap: balance;
+}
+
+.statement-lead .lead-line {
+  display: inline-block;
+  white-space: nowrap;
 }
 
 .statement-content {
