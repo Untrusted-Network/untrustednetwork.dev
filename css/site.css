@@ -517,59 +517,53 @@ a:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
 
 .channels-grid {
   margin-top: 14px;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: 10px;
 }
 
 .channel-link {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  padding: 10px 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 18px;
   background: rgba(3, 3, 9, 0.7);
   border: 1px solid var(--border);
   border-radius: 4px;
-  font-size: 13px;
+  font-family: var(--display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
   color: var(--text);
   text-decoration: none;
-  transition: border-color 0.2s, background 0.2s;
+  transition: border-color 0.2s, background 0.2s, color 0.2s, box-shadow 0.2s, transform 0.15s;
 }
 
 .channel-link:hover {
-  background: rgba(0, 223, 255, 0.08);
+  background: rgba(0, 223, 255, 0.12);
   border-color: var(--cyan);
-  color: #fff;
+  color: #ffffff;
+  box-shadow: 0 0 12px rgba(0, 223, 255, 0.25);
   text-decoration: none;
+  transform: translateY(-1px);
 }
 
-.channel-tag {
-  font-size: 10px;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-}
-
-.channel-handle {
-  font-family: var(--mono);
-  font-size: 12px;
-  color: var(--cyan);
+.channel-name {
+  display: inline-block;
 }
 
 .channel-statement-link {
-  border-color: rgba(255, 26, 53, 0.35);
-  background: rgba(255, 26, 53, 0.05);
+  border-color: rgba(255, 26, 53, 0.45);
+  background: rgba(255, 26, 53, 0.08);
+  color: #ff99a8;
 }
+
 .channel-statement-link:hover {
   border-color: #ff1a35;
-  background: rgba(255, 26, 53, 0.12);
-}
-.channel-statement-link .channel-handle {
-  color: #ff1a35;
-}
-.channel-tag-statement {
-  color: #ff1a35;
-  font-weight: 700;
+  background: rgba(255, 26, 53, 0.2);
+  color: #ffffff;
+  box-shadow: 0 0 14px rgba(255, 26, 53, 0.45);
 }
 
 .statement-banners-grid {
@@ -672,7 +666,7 @@ a:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
 .statement-masthead {
   display: flex;
   align-items: center;
-  gap: 18px;
+  gap: 22px;
   margin-bottom: 32px;
   padding-bottom: 24px;
   border-bottom: 1px solid #1c1f26;
@@ -685,25 +679,27 @@ a:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
   position: absolute;
   bottom: -1px;
   left: 0;
-  width: 90px;
+  width: 120px;
   height: 2px;
   background: #ff1a35;
-  box-shadow: 0 0 10px rgba(255, 26, 53, 0.7);
+  box-shadow: 0 0 12px rgba(255, 26, 53, 0.7);
 }
 
 .statement-emblem {
-  width: 60px;
-  height: 60px;
+  width: auto;
+  height: clamp(68px, 10vw, 88px);
+  max-width: 120px;
   object-fit: contain;
   flex-shrink: 0;
-  filter: drop-shadow(0 0 12px rgba(255, 26, 53, 0.5));
+  filter: drop-shadow(0 0 14px rgba(255, 26, 53, 0.5));
 }
 
 .statement-wordmark {
-  height: 38px;
+  height: clamp(42px, 6vw, 56px);
   width: auto;
-  max-width: 280px;
+  max-width: clamp(240px, 45vw, 360px);
   object-fit: contain;
+  flex-shrink: 1;
 }
 
 .statement-kicker {

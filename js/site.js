@@ -1781,8 +1781,9 @@
         var cam = S.cam, gy = S.gy, down = camIsDown(t);
         var angle = down ? -0.85 : Math.sin(t * CAM.rate) * CAM.sweep;
         var aim = Math.PI / 2 - angle;
-        var lensX = cam.x + Math.cos(aim) * 16 * K;
-        var lensY = cam.y + Math.sin(aim) * 16 * K;
+        var armLen = 22 * K;
+        var lensX = cam.x + Math.cos(aim) * armLen;
+        var lensY = cam.y + Math.sin(aim) * armLen;
         var drop = gy - lensY;
         var cx = lensX + Math.tan(angle) * drop;
         var hw = Math.tan(CAM.half) * drop;
@@ -1799,17 +1800,28 @@
         ctx.save();
         // 1. Background sweep cone & floor landing ellipse
         if (cone) {
-            ctx.fillStyle = seen ? "rgba(255, 0, 0, 0.32)" : "rgba(255, 0, 0, 0.14)";
+            // Ground footprint: primary ellipse
+            ctx.fillStyle = seen ? "rgba(255, 0, 0, 0.36)" : "rgba(255, 0, 0, 0.15)";
             ctx.beginPath();
-            ctx.ellipse(cx, gy, hw, 3.5 * K, 0, 0, Math.PI * 2);
+            ctx.ellipse(cx, gy, hw, 4 * K, 0, 0, Math.PI * 2);
             ctx.fill();
-            ctx.strokeStyle = seen ? "rgba(255, 60, 60, 0.45)" : "rgba(255, 40, 40, 0.22)";
+
+            // Ground footprint: inner focal hot-spot
+            ctx.fillStyle = seen ? "rgba(255, 60, 60, 0.58)" : "rgba(255, 30, 30, 0.24)";
+            ctx.beginPath();
+            ctx.ellipse(cx, gy, hw * 0.45, 2 * K, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Ground perimeter ring
+            ctx.strokeStyle = seen ? "rgba(255, 80, 80, 0.7)" : "rgba(255, 40, 40, 0.32)";
             ctx.lineWidth = 1;
             ctx.stroke();
 
+            // Volumetric ambient light cone
             var bgGrd = ctx.createLinearGradient(lensX, lensY, cx, gy);
-            bgGrd.addColorStop(0, seen ? "rgba(255, 30, 30, 0.24)" : "rgba(255, 30, 30, 0.12)");
-            bgGrd.addColorStop(0.7, seen ? "rgba(255, 10, 10, 0.16)" : "rgba(255, 10, 10, 0.06)");
+            bgGrd.addColorStop(0, seen ? "rgba(255, 40, 40, 0.32)" : "rgba(255, 20, 20, 0.16)");
+            bgGrd.addColorStop(0.3, seen ? "rgba(255, 20, 20, 0.22)" : "rgba(255, 12, 12, 0.10)");
+            bgGrd.addColorStop(0.7, seen ? "rgba(255, 10, 10, 0.16)" : "rgba(255, 6, 6, 0.06)");
             bgGrd.addColorStop(1, seen ? "rgba(255, 0, 0, 0.08)" : "rgba(255, 0, 0, 0.02)");
             ctx.fillStyle = bgGrd;
             ctx.beginPath();
@@ -1818,50 +1830,146 @@
             ctx.lineTo(x2, gy);
             ctx.closePath();
             ctx.fill();
+
+            // Boundary guide laser rays
+            ctx.strokeStyle = seen ? "rgba(255, 90, 90, 0.5)" : "rgba(255, 50, 50, 0.25)";
+            ctx.lineWidth = 1;
+            line(ctx, lensX, lensY, x1, gy);
+            line(ctx, lensX, lensY, x2, gy);
         }
 
-        // 2. Wall mount bracket on the building facade
+        // 2. Heavy industrial wall mount assembly on the arcade facade
+        // Baseplate bolted to the wall
+        ctx.fillStyle = "#12131a";
+        ctx.strokeStyle = "#5a6275";
+        ctx.lineWidth = 1.2 * K;
+        ctx.fillRect(cam.x - 7 * K, cam.y - 18 * K, 14 * K, 8 * K);
+        ctx.strokeRect(cam.x - 7 * K, cam.y - 18 * K, 14 * K, 8 * K);
+        // Corner mounting bolts
+        ctx.fillStyle = "#8a96a3";
+        ctx.fillRect(cam.x - 5.5 * K, cam.y - 16.5 * K, 1.5 * K, 1.5 * K);
+        ctx.fillRect(cam.x + 4 * K, cam.y - 16.5 * K, 1.5 * K, 1.5 * K);
+        ctx.fillRect(cam.x - 5.5 * K, cam.y - 12 * K, 1.5 * K, 1.5 * K);
+        ctx.fillRect(cam.x + 4 * K, cam.y - 12 * K, 1.5 * K, 1.5 * K);
+
+        // Power & data conduit pipe running up from wall plate
+        ctx.strokeStyle = "#252936";
+        ctx.lineWidth = 2.4 * K;
+        line(ctx, cam.x, cam.y - 28 * K, cam.x, cam.y - 18 * K);
+
+        // Angled cantilever arm down to the knuckle
         ctx.strokeStyle = CAM.edge;
-        ctx.lineWidth = 2 * K;
-        ctx.fillStyle = "#111116";
-        ctx.fillRect(cam.x - 4 * K, cam.y - 14 * K, 8 * K, 4 * K);
-        ctx.strokeRect(cam.x - 4 * K, cam.y - 14 * K, 8 * K, 4 * K);
+        ctx.lineWidth = 2.2 * K;
         line(ctx, cam.x, cam.y - 10 * K, cam.x, cam.y);
-        ctx.fillStyle = "#050508";
+
+        // Swivel knuckle gimbal socket
+        ctx.fillStyle = "#1a1c24";
+        ctx.strokeStyle = "#6E6E6E";
+        ctx.lineWidth = 1.4 * K;
         ctx.beginPath();
-        ctx.arc(cam.x, cam.y, 2.5 * K, 0, Math.PI * 2);
+        ctx.arc(cam.x, cam.y, 3.8 * K, 0, Math.PI * 2);
         ctx.fill();
         ctx.stroke();
+        // Inner pivot axle pin
+        ctx.fillStyle = "#0c0d12";
+        ctx.beginPath();
+        ctx.arc(cam.x, cam.y, 1.6 * K, 0, Math.PI * 2);
+        ctx.fill();
 
-        // 3. Camera head (synced from HTML5 - Game - Vector: city_heat.js:312)
+        // Drooping flexible data conduit entering back of camera
+        ctx.strokeStyle = "#08090d";
+        ctx.lineWidth = 1.4 * K;
+        ctx.beginPath();
+        ctx.moveTo(cam.x + 4 * K, cam.y - 10 * K);
+        ctx.quadraticCurveTo(cam.x + 8 * K, cam.y - 4 * K, cam.x + Math.cos(aim - Math.PI) * 6 * K, cam.y + Math.sin(aim - Math.PI) * 6 * K);
+        ctx.stroke();
+
+        // 3. Overwatch Surveillance Camera Head (rotates with aim)
         ctx.translate(cam.x, cam.y);
         ctx.rotate(aim);
-        ctx.fillStyle = CAM.body;
+
+        // Rear heatsink cooling fins
+        ctx.fillStyle = "#12141c";
+        ctx.strokeStyle = "#444b5a";
+        ctx.lineWidth = 1 * K;
+        ctx.fillRect(-7 * K, -5 * K, 5 * K, 10 * K);
+        ctx.strokeRect(-7 * K, -5 * K, 5 * K, 10 * K);
+        ctx.strokeStyle = "#252936";
+        line(ctx, -5.5 * K, -4 * K, -5.5 * K, 4 * K);
+        line(ctx, -4 * K, -4 * K, -4 * K, 4 * K);
+
+        // Main camera chassis
+        ctx.fillStyle = "#08090e";
+        ctx.strokeStyle = CAM.edge;
+        ctx.lineWidth = 1.4 * K;
+        ctx.fillRect(-2 * K, -6.5 * K, 18 * K, 13 * K);
+        ctx.strokeRect(-2 * K, -6.5 * K, 18 * K, 13 * K);
+
+        // Armored chassis seam line
+        ctx.strokeStyle = "#252b38";
+        ctx.lineWidth = 1 * K;
+        line(ctx, 0, 0, 15 * K, 0);
+
+        // Weather shield & sun visor hood extending forward
+        ctx.fillStyle = "#0c0e14";
         ctx.strokeStyle = CAM.edge;
         ctx.lineWidth = 1.2 * K;
-        ctx.fillRect(-4 * K, -5 * K, 17 * K, 10 * K);
-        ctx.strokeRect(-4 * K, -5 * K, 17 * K, 10 * K);
-        // Hood at front
         ctx.beginPath();
-        ctx.moveTo(13 * K, -5 * K);
-        ctx.lineTo(18 * K, -7 * K);
-        ctx.lineTo(18 * K, 7 * K);
-        ctx.lineTo(13 * K, 5 * K);
+        ctx.moveTo(15 * K, -7 * K);
+        ctx.lineTo(25 * K, -9 * K);
+        ctx.lineTo(25 * K, -5 * K);
+        ctx.lineTo(21 * K, 6.5 * K);
+        ctx.lineTo(15 * K, 6 * K);
         ctx.closePath();
         ctx.fill();
         ctx.stroke();
 
-        // Red optical lens eye
-        var eyeCol = down ? "#3a0000" : (seen ? "#FF0000" : "#FF2222");
+        // Side telemetry status LEDs
+        // Power LED: green
+        ctx.fillStyle = down ? "#102610" : "#39FF14";
+        ctx.fillRect(2 * K, -5 * K, 2 * K, 1.4 * K);
+        // Link REC LED: blinking red at 2.5Hz
+        var recBlink = (!down && Math.sin(t * 5) > 0);
+        ctx.fillStyle = down ? "#260000" : (recBlink ? "#FF1A35" : "#600");
+        ctx.fillRect(6 * K, -5 * K, 2 * K, 1.4 * K);
+
+        // Optical sensor assembly (recessed inside visor)
+        ctx.fillStyle = "#040507";
+        ctx.strokeStyle = "#1e2430";
+        ctx.lineWidth = 1 * K;
+        ctx.beginPath();
+        ctx.arc(19 * K, 0, 3.8 * K, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        // Glowing red optical pupil
+        var eyeCol = down ? "#260000" : (seen ? "#FF0033" : "#FF1E28");
         ctx.fillStyle = eyeCol;
         if (!down) {
-            ctx.shadowBlur = (seen ? 8 : 4) * DPR;
+            ctx.shadowBlur = (seen ? 14 : 7) * DPR;
             ctx.shadowColor = "#FF0000";
         }
         ctx.beginPath();
-        ctx.arc(16 * K, 0, 2.2 * K, 0, Math.PI * 2);
+        ctx.arc(19 * K, 0, 2.6 * K, 0, Math.PI * 2);
         ctx.fill();
         ctx.shadowBlur = 0;
+
+        // Lens specular reflection
+        if (!down) {
+            ctx.fillStyle = "#ffffff";
+            ctx.fillRect(18.2 * K, -1.2 * K, 1.2 * K, 1.2 * K);
+        }
+
+        // Cracked visor line when camera is disabled
+        if (down) {
+            ctx.strokeStyle = "rgba(180, 200, 220, 0.75)";
+            ctx.lineWidth = 0.8 * K;
+            ctx.beginPath();
+            ctx.moveTo(16 * K, -5 * K);
+            ctx.lineTo(20 * K, 0);
+            ctx.lineTo(18 * K, 5 * K);
+            ctx.stroke();
+        }
 
         ctx.restore();
         return cone;
@@ -1871,12 +1979,13 @@
     function drawCameraBeamWash(t, cone) {
         if (!cone) return;
         ctx.save();
+        ctx.globalCompositeOperation = "screen";
         var fgGrd = ctx.createLinearGradient(cone.lensX, cone.lensY, cone.cx, cone.gy);
-        var a0 = seen ? 0.28 : 0.12;
-        var a1 = seen ? 0.36 : 0.16;
-        fgGrd.addColorStop(0, "rgba(255, 40, 40, " + a0 + ")");
-        fgGrd.addColorStop(0.65, "rgba(255, 10, 10, " + a1 + ")");
-        fgGrd.addColorStop(1, "rgba(255, 0, 0, " + (a1 * 0.7) + ")");
+        var a0 = seen ? 0.32 : 0.10;
+        var a1 = seen ? 0.42 : 0.14;
+        fgGrd.addColorStop(0, "rgba(255, 60, 60, " + a0 + ")");
+        fgGrd.addColorStop(0.7, "rgba(255, 20, 20, " + a1 + ")");
+        fgGrd.addColorStop(1, "rgba(255, 0, 0, " + (a1 * 0.6) + ")");
         ctx.fillStyle = fgGrd;
         ctx.beginPath();
         ctx.moveTo(cone.lensX, cone.lensY);
@@ -1885,18 +1994,12 @@
         ctx.closePath();
         ctx.fill();
 
-        // Cone scan boundary edges
-        ctx.strokeStyle = seen ? "rgba(255, 90, 90, 0.45)" : "rgba(255, 50, 50, 0.22)";
-        ctx.lineWidth = 1;
-        line(ctx, cone.lensX, cone.lensY, cone.x1, cone.gy);
-        line(ctx, cone.lensX, cone.lensY, cone.x2, cone.gy);
-
         // Active surveillance scanline cutting across the cone
-        var scanProg = ((t * 1.5) % 1);
+        var scanProg = ((t * 1.6) % 1);
         var scanY = cone.lensY + scanProg * (cone.gy - cone.lensY);
         var slx = cone.lensX + (cone.x1 - cone.lensX) * scanProg;
         var srx = cone.lensX + (cone.x2 - cone.lensX) * scanProg;
-        ctx.strokeStyle = seen ? "rgba(255, 150, 150, 0.65)" : "rgba(255, 80, 80, 0.3)";
+        ctx.strokeStyle = seen ? "rgba(255, 180, 180, 0.75)" : "rgba(255, 80, 80, 0.35)";
         ctx.lineWidth = 1.2;
         line(ctx, slx, scanY, srx, scanY);
         ctx.restore();
@@ -2245,14 +2348,18 @@
     var soundVol = document.getElementById("soundVol");
     var soundPct = document.getElementById("soundPct");
     var player = (window.StreetMusic && (window.AudioContext || window.webkitAudioContext))
-        ? window.StreetMusic.create({ volume: 0.6 }) : null;
-    var currentVolume = 0.6;
+        ? window.StreetMusic.create({ volume: 0 }) : null;
+    var currentVolume = 0;
     var audioInitiated = false;
 
     // A short blip for the things that answer a click, while the sound is on.
-    function sfx(freq, slideTo, dur, type) { if (player) player.blip(freq, slideTo, dur, type); }
+    function sfx(freq, slideTo, dur, type) {
+        if (player && currentVolume > 0 && player.isPlaying()) player.blip(freq, slideTo, dur, type);
+    }
     // A burst of filtered noise: a spray can, a rattle, rushing water.
-    function hiss(seconds, type, freq, vol) { if (player) player.hiss(seconds, type, freq, vol); }
+    function hiss(seconds, type, freq, vol) {
+        if (player && currentVolume > 0 && player.isPlaying()) player.hiss(seconds, type, freq, vol);
+    }
 
     function updateAudioUI(on, vol) {
         if (soundBtn) {
@@ -2270,13 +2377,19 @@
         }
     }
 
-    function initAudio() {
-        if (!player || audioInitiated) return;
+    function initAudio(initialVol) {
+        if (!player) return;
+        var targetVol = (typeof initialVol === "number") ? initialVol : 0.6;
+        currentVolume = targetVol;
         audioInitiated = true;
         player.start();
         player.setVolume(currentVolume);
-        sfx(440, 880, 0.12, "square");
-        updateAudioUI(true, currentVolume);
+        if (currentVolume > 0) {
+            sfx(440, 880, 0.12, "square");
+            updateAudioUI(true, currentVolume);
+        } else {
+            updateAudioUI(false, 0);
+        }
     }
 
     if (soundBtn) {
@@ -2284,15 +2397,20 @@
         soundBtn.addEventListener("click", function () {
             if (!player) return;
             if (!audioInitiated) {
-                initAudio();
+                initAudio(0.6);
                 return;
             }
-            var on = player.toggle();
-            if (on && currentVolume === 0) {
+            if (player.isPlaying() && currentVolume > 0) {
+                player.stop();
+                currentVolume = 0;
+                updateAudioUI(false, 0);
+            } else {
                 currentVolume = 0.6;
+                player.start();
                 player.setVolume(currentVolume);
+                sfx(440, 880, 0.12, "square");
+                updateAudioUI(true, currentVolume);
             }
-            updateAudioUI(on, on ? currentVolume : 0);
         });
 
         // nothing plays to a tab nobody is looking at
@@ -2309,15 +2427,15 @@
             if (soundPct) soundPct.textContent = Math.round(v * 100) + "%";
             if (!player) return;
             if (!audioInitiated && v > 0) {
-                initAudio();
+                initAudio(v);
                 return;
             }
             player.setVolume(v);
-            if (v === 0 && player.isPlaying()) {
-                player.stop();
+            if (v === 0) {
+                if (player.isPlaying()) player.stop();
                 updateAudioUI(false, 0);
-            } else if (v > 0 && !player.isPlaying()) {
-                player.start();
+            } else {
+                if (!player.isPlaying()) player.start();
                 player.setVolume(v);
                 updateAudioUI(true, v);
             }
@@ -2335,9 +2453,6 @@
     window.addEventListener("keydown", function (e) {
         if (isTypingInput()) return;
         var code = e.code || e.key;
-        if (!audioInitiated && (code === "Space" || code === "KeyW" || code === "KeyA" || code === "KeyD" || code === "ArrowLeft" || code === "ArrowRight" || code === "ArrowUp")) {
-            initAudio();
-        }
         if (code === "KeyA" || code === "ArrowLeft") {
             keys.left = true;
         } else if (code === "KeyD" || code === "ArrowRight") {
@@ -2462,8 +2577,22 @@
             return;
         }
         if (S.cam && near(x, y, S.cam.x, S.cam.y + 4 * K, pad)) {
-            if (camIsDown(t)) { camDownUntil = 0; sfx(330, 660, 0.12); }
-            else { camDownUntil = t + CAM.downFor; sfx(520, 70, 0.3, "triangle"); if (seen) heat = clamp(heat + HEAT.cam, 0, 100); }
+            if (camIsDown(t)) {
+                camDownUntil = 0;
+                sfx(330, 660, 0.12);
+                for (var sp = 0; sp < 6; sp++) {
+                    var ang = Math.random() * Math.PI * 2, spd = (30 + Math.random() * 50) * K;
+                    addBit(S.cam.x, S.cam.y, Math.cos(ang) * spd, Math.sin(ang) * spd - 20 * K, "#39FF14", 2 * K, 0.4);
+                }
+            } else {
+                camDownUntil = t + CAM.downFor;
+                sfx(520, 70, 0.3, "triangle");
+                if (seen) heat = clamp(heat + HEAT.cam, 0, 100);
+                for (var sp = 0; sp < 12; sp++) {
+                    var ang = Math.random() * Math.PI * 2, spd = (50 + Math.random() * 90) * K;
+                    addBit(S.cam.x, S.cam.y, Math.cos(ang) * spd, Math.sin(ang) * spd - 30 * K, Math.random() > 0.4 ? "#FFB300" : "#FF1E28", 2.4 * K, 0.5 + Math.random() * 0.4);
+                }
+            }
             return;
         }
         for (i = 0; i < S.lamps.length; i++) {
@@ -2519,7 +2648,6 @@
         hero.addEventListener("pointermove", point);
         hero.addEventListener("pointerdown", function (e) {
             point(e);
-            if (!audioInitiated) initAudio();
         });
         hero.addEventListener("pointerleave", function (e) {
             if (e.pointerType !== "touch") pointerIn = false;
