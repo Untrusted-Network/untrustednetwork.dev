@@ -263,7 +263,7 @@
     // Keystone's support line, rung from the comm booth: what it says while you hold, and Agent 7 at the end.
     var HOLD = { seconds: 24, each: 3.5, col: "#8FB8C8", lines: [
         "YOUR CALL IS IMPORTANT TO US.",
-        "DID YOU KNOW? MOST ISSUES ARE RESOLVED BY THE NEXT UPDATE.",
+        "CARE+ MEMBERS ENJOY A SEPARATE, EXCLUSIVE QUEUE.",
         "YOUR CALL MAY BE RECORDED TO IMPROVE YOUR EXPERIENCE.",
         "YOU CAN ALSO FIND ANSWERS IN THE KEYSTONE HELP CENTRE.",
         "NIA SUPPORT, AGENT 7: YOUR DEVICE IS WORKING AS INTENDED.",
@@ -2512,10 +2512,23 @@
         }
     }
 
+    // The street answers the keys only while it fills at least the middle of the window, so the
+    // arrows and Space scroll the page as usual once the visitor has moved on to the cards. On a
+    // focused button or link, Space and Enter keep their usual job.
+    function streetHasKeys() {
+        var r = hero.getBoundingClientRect(), mid = window.innerHeight * 0.5;
+        return r.top < mid && r.bottom > mid;
+    }
+    function focusOnControl() {
+        var el = document.activeElement, tag = el && el.tagName ? el.tagName.toUpperCase() : "";
+        return tag === "BUTTON" || tag === "A" || tag === "SUMMARY";
+    }
+
     // Keyboard movement listeners (A/D run, W/Space jump, F spray, E interact/sit)
     window.addEventListener("keydown", function (e) {
-        if (isTypingInput()) return;
+        if (isTypingInput() || e.ctrlKey || e.metaKey || e.altKey || !streetHasKeys()) return;
         var code = e.code || e.key;
+        if (code === "Space" && focusOnControl()) return;
         if (code === "KeyA" || code === "ArrowLeft") {
             keys.left = true;
             if (op.sitting) op.sitting = false;
@@ -2534,7 +2547,7 @@
                     sfx(440, 720, 0.09, "square");
                 }
             }
-            if (code === "Space") e.preventDefault();
+            if (code === "Space" || code === "ArrowUp") e.preventDefault();
         } else if (code === "KeyF") {
             if (clock < (op.sprayUntil || 0)) return;
             op.sprayUntil = clock + TAG_TIME;

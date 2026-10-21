@@ -318,6 +318,8 @@ a:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
 }
 
 .genre-sep { margin: 0 8px; opacity: 0.55; }
+/* the separator and the link wrap together, so "//" never starts a line on its own */
+.genre-link { white-space: nowrap; }
 .genre-cta { color: var(--op); font-weight: 600; }
 
 .tagline, .blurb, .genre { transition: opacity 0.5s linear 0.45s; }
@@ -512,7 +514,21 @@ a:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
   color: var(--text-dim);
 }
 
-.foot-end { cursor: pointer; }
+
+/* ─── 404: the scrubbed address (404.html, js/notfound.js) ─────────────── */
+.nf-brand { pointer-events: auto; color: var(--text); }
+.nf-brand:hover { text-decoration: none; color: #ffffff; }
+.nf-title {
+  margin-top: 12px;
+  max-width: 22ch;
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: clamp(1.6rem, min(5vw, 8vh), 3.2rem);
+  line-height: 1.12;
+  letter-spacing: 0.02em;
+  color: #EAFBFF;
+  text-shadow: 0 0 18px rgba(0, 223, 255, 0.5), 0 0 2px rgba(0, 223, 255, 0.9);
+}
 
 /* ─── Social Channels & Signals ────────────────────────────────────────── */
 .panel-channels { border-color: rgba(0, 223, 255, 0.45); }
@@ -907,8 +923,21 @@ a:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
   color: #ffffff;
 }
 
+/* The statement page on a phone: the masthead shrinks to fit, and the red lead may wrap. */
+@media (max-width: 520px) {
+  .statement-masthead { gap: 18px; }
+  .statement-masthead > a { min-width: 0; }
+  .statement-masthead > a:last-of-type { flex: 1 1 0; }
+  .statement-wordmark { height: auto; width: 100%; max-width: 100%; margin-left: 0; }
+  .statement-lead { letter-spacing: 0.08em; }
+  .statement-lead .lead-line { white-space: normal; }
+}
+
 @media (max-width: 640px) {
   .cards { grid-template-columns: 1fr; }
+  /* too narrow for one line: the link takes a line of its own, without the separator */
+  .genre-link { display: block; margin-top: 6px; }
+  .genre-link .genre-sep { display: none; }
   .status { display: none; }
   .bar { padding-top: 22px; }
   .brand { font-size: 12px; letter-spacing: 0.16em; }
@@ -936,5 +965,4 @@ a:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
   .wordmark, .tagline, .blurb, .genre { transition: none; }
   .boot .cursor { animation: none; }
   .hud { display: none; }
-  .foot-end { cursor: auto; }
 }
