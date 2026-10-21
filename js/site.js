@@ -278,6 +278,15 @@
     var SCAN = { range: 900, time: 0.7, show: 6 };
     var TAG_ORDER = ["operator_mark", "crown", "glitch_eye", "offbook", "v8_crest", "bolt", "null_sig", "crimson_row", "arrow_up", "circuit", "stackrunners", "gridrot"];
     var TAG_MAX = 48, TAG_HALF = 18, TAG_TIME = 0.6;
+    // Each thing answers once and then rests a moment, so a held key or a burst of clicks gets one
+    // answer instead of a stutter (seconds, per kind).
+    var REST = { vending: 0.7, bin: 0.7, hydrant: 1.0, tree: 0.9, booth: 1.2, arcade: 1.2, cam: 0.8, lamp: 0.5, scan: 0.8, spray: TAG_TIME };
+    var restUntil = {};
+    function rested(key, kind, t) {
+        if (t < (restUntil[key] || 0)) return false;
+        restUntil[key] = t + REST[kind];
+        return true;
+    }
 
     var op = { x: 0, dir: 1, target: 0, wanderAt: 0, colour: 0, jumpY: 0, vy: 0, sprayUntil: 0, sitting: false };
     var keys = { left: false, right: false };
@@ -2528,6 +2537,7 @@
     window.addEventListener("keydown", function (e) {
         if (isTypingInput() || e.ctrlKey || e.metaKey || e.altKey || !streetHasKeys()) return;
         var code = e.code || e.key;
+        if (e.repeat && (code === "KeyE" || code === "KeyF")) return;     // holding E or F acts once
         if (code === "Space" && focusOnControl()) return;
         if (code === "KeyA" || code === "ArrowLeft") {
             keys.left = true;
@@ -2588,6 +2598,7 @@
 
     function sprayAt(x, y, t) {
         var F = FACADE, hit = null, half = tagHalf() + 4;
+        if (t < (restUntil.spray || 0)) return;
         S.near.forEach(function (b) { if (x > b.x && x < b.x + b.w && y > S.gy - b.h && y < S.gy) hit = b; });
         if (!hit || hit.w < half * 2 + 8) return;
         var tx = clamp(x, hit.x + half, hit.x + hit.w - half);
@@ -2598,6 +2609,7 @@
         tags.push({ x: tx, y: ty, style: TAG_ORDER[tagNext++ % TAG_ORDER.length], col: OP_COLOURS[op.colour], rot: (r() - 0.5) * 0.16,
             t0: t, seen: seen, len: [4 + r() * 9, 4 + r() * 9] });
         if (tags.length > TAG_MAX) tags.shift();
+        restUntil.spray = t + REST.spray;
         hiss(0.5, "highpass", 3600, 0.1);
         if (seen) heat = clamp(heat + HEAT.tag, 0, 100);
     }
@@ -2605,6 +2617,7 @@
     // The arcade's door: its chip tune for half a minute, heard through the door, or shut again.
     // With the sound off the door only lights for a moment.
     function toggleArcade(t) {
+        if (!rested("arcade", "arcade", t)) return;
         if (player && player.tunePlaying() === "arcade") { player.stopTune(); return; }
         var heard = !!player && player.playTune("arcade", 30, function () { arcadeOpenUntil = 0; });
         arcadeOpenUntil = t + (heard ? 30 : 3);
@@ -2612,6 +2625,7 @@
 
     function useProp(p, t) {
         var gy = S.gy, i, dir;
+        if (REST[p.kind] && !rested("prop" + S.props.indexOf(p), p.kind, t)) return true;     // still resting: the click is spent
         if (p.kind === "vending") {
             var br = VEND_BRANDS[p.idx % VEND_BRANDS.length];
             bits.push({ x: p.x - 4 * K, y: gy - 10 * K, vx: -26 * K, vy: -70 * K, col: br.col, w: 4 * K, h: 7 * K, life: 2.6, max: 2.6, g: 540 * K });
@@ -2653,7 +2667,7 @@
         var r = canvas.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top, t = now(), i, l, p, box;
         var pad = Math.max(16, 16 * K);
         if (near(x, y, op.x, S.gy - OP.h * K / 2, Math.max(pad, OP.h * K / 2 + 4))) { setOperatorColour(op.colour + 1); sfx(660, 990, 0.09); return; }
-        if (near(x, y, drone.x, drone.y, pad + 4)) { scan = { t0: t, x: op.x, y: S.gy - OP.h * K / 2 }; sfx(420, 1680, 0.5, "sine"); return; }
+        if (near(x, y, drone.x, drone.y, pad + 4)) { if (!rested("scan", "scan", t)) return; scan = { t0: t, x: op.x, y: S.gy - OP.h * K / 2 }; sfx(420, 1680, 0.5, "sine"); return; }
         if (patrol && Math.abs(x - patrol.x) <= 58 * K && Math.abs(y - patrol.y) <= 26 * K) {
             patrol.paint = OP_COLOURS[op.colour];
             hiss(0.5, "highpass", 3600, 0.1);
@@ -2669,6 +2683,7 @@
             return;
         }
         if (S.cam && near(x, y, S.cam.x, S.cam.y + 4 * K, pad)) {
+            if (!rested("cam", "cam", t)) return;
             if (camIsDown(t)) {
                 camDownUntil = 0;
                 sfx(330, 660, 0.12);
@@ -2690,6 +2705,7 @@
         for (i = 0; i < S.lamps.length; i++) {
             l = S.lamps[i];
             if ((Math.abs(x - l.x) <= pad && y > S.gy - LAMP.poleH * K - 8 && y < S.gy) || near(x, y, l.x + 26 * K, S.gy - LAMP.poleH * K, pad)) {
+                if (!rested("lamp" + i, "lamp", t)) return;
                 l.broken = !l.broken;
                 sfx(l.broken ? 240 : 480, l.broken ? 90 : 720, 0.12);
                 return;
