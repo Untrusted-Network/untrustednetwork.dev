@@ -263,7 +263,8 @@ a:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
   /* As wide as its own text or canvas, so the reveal's clip never cuts the title short. */
   position: relative;
   width: max-content;
-  margin-top: 6px;
+  /* a blank terminal line after "Ready" before the title: the brackets rise about 6px above the box */
+  margin-top: calc(6px + clamp(14px, 2.2vh, 22px));
   font-family: var(--display);
   font-weight: 700;
   font-size: clamp(2.1rem, min(8.5vw, 11vh), 5.5rem);
