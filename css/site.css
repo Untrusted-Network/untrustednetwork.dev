@@ -6,6 +6,25 @@
   font-display: swap;
 }
 
+/* Body monospace face: Source Code Pro, SIL Open Font License (self-hosted). */
+@font-face {
+  font-family: "Source Code Pro";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("../fonts/source-code-pro-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: "Source Code Pro";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("../fonts/source-code-pro-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
 /* Same palette as the game's css/style.css. */
 :root {
   --bg: #030309;
@@ -66,6 +85,8 @@ a:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
      screen the page grows a little and scrolls where it would otherwise crush the buildings flat. */
   display: flex;
   flex-direction: column;
+  width: 100%;
+  max-width: 100%;
   min-height: 100vh;
   min-height: 100svh;
   overflow: hidden;
@@ -211,6 +232,8 @@ a:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
 .hero-copy {
   position: relative;
   z-index: 2;
+  min-width: 0;
+  max-width: 100%;
   padding: clamp(4px, 1.5vh, 16px) var(--gutter) 0;
   /* clicks fall through to the street, except on the words themselves */
   pointer-events: none;
@@ -260,9 +283,10 @@ a:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
 @keyframes blink { 50% { opacity: 0; } }
 
 .wordmark {
-  /* As wide as its own text or canvas, so the reveal's clip never cuts the title short. */
+  /* As wide as its own text or canvas, capped to its container, so the reveal's clip never cuts the title short. */
   position: relative;
   width: max-content;
+  max-width: 100%;
   /* a blank terminal line after "Ready" before the title: the brackets rise about 6px above the box */
   margin-top: calc(6px + clamp(14px, 2.2vh, 22px));
   font-family: var(--display);
@@ -387,6 +411,7 @@ a:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
 
 .card,
 .panel {
+  min-width: 0;
   background: var(--panel-bg);
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -448,7 +473,9 @@ a:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
 }
 
 .wishlist-input {
-  flex: 1 1 240px;
+  flex: 1 1 200px;
+  min-width: 0;
+  width: 100%;
   max-width: 380px;
   padding: 9px 12px;
   background: rgba(3, 3, 9, 0.85);
@@ -555,6 +582,7 @@ a:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
 }
 
 .channel-link {
+  min-width: 0;
   display: flex;
   align-items: center;
   justify-content: center;

@@ -127,7 +127,7 @@
             }
         }
     }
-    function drawWordmark() {
+    function drawWordmark(availW) {
         if (!wordmarkEl) return;
         if (!wordmarkCanvas) {
             var sr = document.createElement("span");
@@ -140,10 +140,17 @@
             wordmarkEl.appendChild(sr);
             wordmarkEl.appendChild(wordmarkCanvas);
         }
+        DPR = Math.min(window.devicePixelRatio || 1, 2);
         var lay = wordmarkLayout();
-        var capH = parseFloat(window.getComputedStyle(wordmarkEl).fontSize) || 64;
-        var padL = copyEl ? (parseFloat(window.getComputedStyle(copyEl).paddingLeft) || 24) : 24;
-        var maxW = Math.max(160, W - padL * 2);
+        var cs = window.getComputedStyle(wordmarkEl);
+        var capH = parseFloat(cs.fontSize) || 64;
+        var ccs = copyEl ? window.getComputedStyle(copyEl) : null;
+        var padL = ccs ? (parseFloat(ccs.paddingLeft) || 24) : 24;
+        var padR = ccs ? (parseFloat(ccs.paddingRight) || 24) : 24;
+        var docW = document.documentElement ? document.documentElement.clientWidth : (availW || W);
+        var baseW = availW || W || docW;
+        if (docW > 0) baseW = Math.min(baseW, docW);
+        var maxW = Math.max(120, baseW - padL - padR);
         var sCss = Math.min(capH / 10, maxW / lay.w), s = sCss * DPR;
         if (Math.abs(s - wordmarkScale) < 0.001) return;
         wordmarkScale = s;
@@ -193,8 +200,10 @@
 
     var BUILDINGS = [
         { name: "MARKET ROW",   hex: "#00DFFF", w: 620, h: 450, ent: 0, roof: [[0.2, "condenser"], [0.5, "hut"], [0.8, "array"]] },
-        { name: "PIXEL ARCADE", hex: "#FF1493", w: 560, h: 560, ent: 3, tall: true, roof: [[0.2, "dishbox"], [0.5, "tank"], [0.82, "beacon"]],
-          posters: [{ side: -1, yf: 0.33, art: "overdrive", title: "OVERDRIVE", col: "#FF1493" }, { side: -1, yf: 0.6, art: "shatter", title: "SHATTER", col: "#FF8C00" }] },
+        { name: "PIXEL ARCADE", hex: "#FF1493", w: 560, h: 560, ent: -1, arcade: true, tall: true, roof: [[0.2, "dishbox"], [0.5, "tank"], [0.82, "beacon"]],
+          posters: [{ side: -1, yf: 0.28, art: "pinball", title: "PINBALL", col: "#FFD700" },
+                    { side: -1, yf: 0.6,  art: "vector_combat", title: "IMPACT", col: "#FF5F1F" },
+                    { side: 1,  yf: 0.46, art: "pulse", title: "PULSE", col: "#FF1493" }] },
         { name: "SUBGRID HUB",  hex: "#8A2BE2", w: 600, h: 400, ent: 1, roof: [[0.2, "hut"], [0.5, "array"], [0.82, "ventbox"]] },
         { name: "CHIP CLINIC",  hex: "#39FF14", w: 640, h: 440, ent: 0, roof: [[0.2, "beacon"], [0.5, "dishbox"], [0.82, "junction"]] },
         { name: "GRID TOWER",   hex: "#00DFFF", w: 520, h: 460, ent: 3, roof: [[0.2, "ventbox"], [0.5, "condenser"], [0.82, "tank"]] },
@@ -222,8 +231,7 @@
     var VEND_BRANDS = [
         { name: "COOLANT+", col: "#7CF9FF", stock: ["#7CF9FF", "#39FF14", "#FFFFFF"] },
         { name: "SYNTH SNAX", col: "#FF7A00", stock: ["#FF7A00", "#FFD24A", "#FF1493"] },
-        { name: "VOLTAIC", col: "#FFD24A", stock: ["#FFD24A", "#00DFFF", "#B14FFF"] },
-        { name: "NEON NOODLES", col: "#FF1493", stock: ["#FF1493", "#FFFFFF", "#7CF9FF"] }
+        { name: "LUMEN", col: "#7CFFD4", stock: ["#7CFFD4", "#B8FFF0", "#3DE0B0"] }
     ];
     var CABINET_STREET = { body: "#0f2418", face: "#143222", edge: "#2FBF71", dim: "rgba(47,191,113,0.45)" };
     var CABINET_ROOF = { body: "#171b20", face: "#20252c", edge: "#8A96A3", dim: "rgba(138,150,163,0.45)" };
@@ -254,10 +262,19 @@
         speed: [0, 270, 450, 630], extra: 90, scale: [0, 0.10, 0.17, 0.27], alpha: [0, 0.35, 0.60, 0.85], perSecond: 0.7 };
     // An Overwatch drone comes through now and then: a patrol or tracker at low heat, an interceptor
     // at 45, and a heavy patrol enforcer at 80 (city_render_bg.js).
-    var PATROL = { col: "#6E6E6E", scale: 1.5, height: 180, speed: 90, responseSpeed: 126, first: 9, every: [22, 18], beam: 40 };
-    // Nullgrid Civic Works' municipal scrubber drone (city_scrubber.js): cleans graffiti off the walls.
+    var PATROL = { col: "#6E6E6E", scale: 1.5, height: 180, speed: 90, responseSpeed: 126, first: 9, every: [22, 18], beam: 40,
+        stopDown: 1.1, stopScan: 3.4, stopUp: 1.3, stopDip: 44, stopChance: 0.06, stopCooldown: 14, scanHalf: 0.36 };
+    // Nullgrid Civic Works' municipal scrubber drone (city_scrubber.js): cleans graffiti off the walls,
+    // and scrubs spray paint off blinded Overwatch drones and cameras.
     var SCRUB = { col: "#FFA41B", body: "#15171e", glass: "#FFD27A", solvent: "#9FE7FF",
-        scale: 1.25, cruise: 78, padDrop: 24, speed: 54, workSpeed: 108, cleanTime: 6.5, polishTime: 3.0, rest: [4, 5], polishGap: [7, 10], blindTime: 10 };
+        scale: 1.25, cruise: 78, padDrop: 24, speed: 54, workSpeed: 108, cleanTime: 6.5, eyeCleanTime: 2.7, polishTime: 3.0, rest: [4, 5], polishGap: [7, 10], blindTime: 10 };
+    // Civic Works' bin round drone (city_street_life.js): the scrubber airframe in recycling green with a hopper.
+    var BIN_DRONE = { col: "#39E07A", body: "#15171e", glass: "#B6FFC8", lamp: "rgba(170,255,190,0.85)",
+        scale: 1.25, cruise: 110, hover: 51, speed: 96, suckTime: 2.0, first: 13, every: [20, 14], blindTime: 10 };
+    // Street passers-by (city_street_life.js): blocks with neon umbrellas in the rain, ducking into doors at heat 45.
+    var WALKER_MAX = 4, WALKER_HIDE_HEAT = 45, WALKER_BACK_HEAT = 38;
+    var WALKER_COLS = ["#FF1493", "#00DFFF", "#39FF14", "#FF7A00", "#8A2BE2", "#FFD700"];
+    var KERB_H = 8;
     // What can be clicked in the street, as [half-width, height] in the game's pixels.
     var PROP_BOX = { bench: [33, 38], bin: [13, 33], vending: [18, 60], tree: [30, 90], cabinet: [32, 47], hydrant: [12, 34], booth: [18, 63] };
     // Keystone's support line, rung from the comm booth: what it says while you hold, and Agent 7 at the end.
@@ -291,8 +308,8 @@
     var op = { x: 0, dir: 1, target: 0, wanderAt: 0, colour: 0, jumpY: 0, vy: 0, sprayUntil: 0, sitting: false };
     var keys = { left: false, right: false };
     var drone = { x: 0, y: 0, barrelRollTimer: 0 };
-    var tags = [], tagNext = 0, scan = null, camDownUntil = 0;
-    var cars = [], patrol = null, patrolAt = PATROL.first, patrolCount = 0, scrubber = null, bits = [], floats = [];
+    var tags = [], tagNext = 0, scan = null, camDownUntil = 0, camPaint = null;
+    var cars = [], patrol = null, patrolAt = PATROL.first, patrolCount = 0, scrubber = null, binDrone = null, binAt = BIN_DRONE.first, walkers = [], walkersHidden = false, steam = [], steamAt = 7, bits = [], floats = [];
     var arcadeOpenUntil = 0;        // while the arcade's door stands lit and its tune plays
     var holdCall = null;            // a call to Keystone in progress: { t0, until, lines, x }
     var heat = 0, seen = false, lastSeen = -10, lastPointer = -10, lastHud = -1, pointerIn = false;
@@ -347,7 +364,7 @@
             boxes.forEach(function (q) { if (q.r > q.l && q.r > x0 - 16 && q.l < x1 + 16) ceiling = Math.max(ceiling, q.b); });
             return gy - ceiling - 22;
         };
-        S = { gy: gy, near: [], lamps: [], props: [], cam: null, roomOver: roomOver };
+        S = { gy: gy, near: [], lamps: [], props: [], sewers: [], cam: null, roomOver: roomOver };
         var x, w, h;
 
         // The street is laid out around the Pixel Arcade, which is always wholly in view with the
@@ -383,9 +400,14 @@
             h = space ? Math.min(def.h * K, room - space * K) : Math.max(150 * K, Math.min(def.h * K, room - 8));
             S.near.push({ x: x, w: w, h: h, def: def, idx: i, room: room });
             gap = GAPS[slot] * K;
-            STREET[slot].forEach(function (it) { S.props.push({ x: x + w + it[0] * K, kind: it[1], idx: slot, shakeUntil: 0, used: false }); });
+            STREET[slot].forEach(function (it) {
+                var px = x + w + it[0] * K;
+                var dbl = it[1] === "bin" && (((slot * 7 + Math.round(it[0])) % 5) < 2);
+                S.props.push({ x: px, kind: it[1], idx: slot, dbl: dbl, shakeUntil: 0, used: false });
+            });
             // the lamp's light falls a little to its right, so the post stands left of the gap's middle
             S.lamps.push({ x: x + w + gap / 2 - 22 * K, broken: !!broken[S.lamps.length] });
+            if (slot % 2 === 1) S.sewers.push({ x: x + w + gap * 0.56 });
             x += w + gap;
             i++;
         }
@@ -414,9 +436,19 @@
 
         cars.length = 0;
         bits.length = 0;
+        steam.length = 0;
         floats.length = 0;
         patrol = null;
-        if (!REDUCE) for (i = 0; i < maxCars() / 2; i++) spawnCar(true);
+        binDrone = null;
+        walkers.length = 0;
+        walkersHidden = false;
+        camPaint = null;
+        if (!REDUCE) {
+            for (i = 0; i < maxCars() / 2; i++) spawnCar(true);
+            seedWalkers();
+        } else {
+            seedWalkers(2);
+        }
 
         rain.length = 0;
         var n = Math.round(W / 16);
@@ -497,17 +529,20 @@
     }
 
     function drawFront(c) {
-        var gy = S.gy;
+        var gy = S.gy, kerbH = Math.max(4, Math.round(KERB_H * K));
         c.clearRect(0, 0, W, H);
         S.near.forEach(function (b) { drawBuilding(c, b); });
 
-        // Street: kerb line, lane dashes and the two service conduits under it. The foot of the band
-        // is left clear for the HEAT readout.
+        // Street: kerb with sewer grates set into its face, lane dashes and the two service conduits
+        // under it. The foot of the band is left clear for the HEAT readout.
         var sh = H - gy, x;
         c.fillStyle = "#0a0a14";
         c.fillRect(0, gy, W, sh);
-        c.fillStyle = "#3a2a66";
-        c.fillRect(0, gy, W, 2);
+        c.fillStyle = "#2b1f4d";
+        c.fillRect(0, gy, W, kerbH);
+        c.fillStyle = "#4d3886";
+        c.fillRect(0, gy, W, 1.5);
+        S.sewers.forEach(function (sw) { drawSewerGrate(c, sw.x, gy); });
         c.fillStyle = "#22222e";
         for (x = 10; x < W; x += 62 * K) c.fillRect(x, gy + sh * 0.2, 22 * K, 2);
         c.fillStyle = "rgba(0,160,190,0.45)";
@@ -516,6 +551,23 @@
         c.fillStyle = "rgba(200,110,20,0.4)";
         c.fillRect(0, gy + sh * 0.54, W, 2);
         for (x = 240; x < W; x += 300 * K) c.fillRect(x, gy + sh * 0.54 - 2, 6, 6);
+    }
+
+    // Street drain (city_sewer_vents.js): a square slot set into the kerb's face.
+    function drawSewerGrate(c, sx, gy) {
+        var hw = 17;
+        c.save();
+        c.translate(sx, gy);
+        c.scale(K, K);
+        c.fillStyle = "#110c20"; c.fillRect(-hw, 1, hw * 2, KERB_H - 2);
+        c.fillStyle = "#06040c"; c.fillRect(-hw + 1, 3, hw * 2 - 2, KERB_H - 4);
+        for (var gx = -hw + 3; gx < hw - 1; gx += 4) {
+            c.fillStyle = "#3f2e72"; c.fillRect(gx, 1, 2, KERB_H - 2);
+            c.fillStyle = "#6951ab"; c.fillRect(gx, 1, 2, 1);
+        }
+        c.strokeStyle = "rgba(110,84,180,0.85)"; c.lineWidth = 1;
+        c.strokeRect(-hw + 0.5, 0.5, hw * 2 - 1, KERB_H - 1);
+        c.restore();
     }
 
     // One facade, in the game's pixels with the origin at its foot on the street.
@@ -532,10 +584,12 @@
         c.fillRect(0, top, w, h);
 
         // The window grid, padded evenly, with no window behind the name plate.
-        c.font = "bold 11px cyber, monospace";
+        var isArc = !!b.def.arcade;
+        var plateH = isArc ? 36 : F.plateH, padXSign = isArc ? 30 : 12;
+        c.font = isArc ? "bold 18px cyber, monospace" : "bold 11px cyber, monospace";
         var textW = c.measureText(b.def.name).width;
-        var signY = Math.max(-F.signY, top + 12 + F.plateH / 2);
-        var boxL = doorX - textW / 2 - 18, boxR = doorX + textW / 2 + 18, boxT = signY - F.plateH / 2 - 4;
+        var signY = Math.max(-F.signY - (isArc ? 24 : 0), top + 12 + plateH / 2);
+        var boxL = doorX - textW / 2 - (padXSign + 6), boxR = doorX + textW / 2 + (padXSign + 6), boxT = signY - plateH / 2 - 4;
         var ncols = Math.max(1, Math.floor((w - 2 * F.pad - F.winW) / F.gapX) + 1);
         var padX = (w - ((ncols - 1) * F.gapX + F.winW)) / 2;
         var zoneH = h - F.storeH;
@@ -584,13 +638,34 @@
         bays(4, doorX - 36 - 4);
         bays(doorX + 36, w - 4 - (doorX + 36));
 
-        c.fillStyle = "#06040e";
-        c.fillRect(doorX - 22, -64, 44, 64);
-        c.strokeStyle = rgba(hex, 0.3);
-        c.lineWidth = 1;
-        c.strokeRect(doorX - 22, -64, 44, 64);
-        line(c, doorX, -64, doorX, 0);
-        drawEntrance(c, b.def.ent, doorX, hex);
+        if (isArc) {
+            // PIXEL ARCADE: lit surround + transom header + its own milled pink token mark above (no outer double frame).
+            c.fillStyle = "#0a0d16";
+            c.fillRect(doorX - 27, -76, 54, 76);
+            c.strokeStyle = "#00DFFF"; c.lineWidth = 2;
+            c.strokeRect(doorX - 27, -76, 54, 76);
+            c.fillStyle = "rgba(0,223,255,0.16)";
+            c.fillRect(doorX - 24, -74, 48, 8);
+            c.strokeStyle = "rgba(0,223,255,0.65)"; c.lineWidth = 1;
+            c.strokeRect(doorX - 23.5, -73.5, 47, 7);
+            c.fillStyle = "rgba(0,223,255,0.45)";
+            c.fillRect(doorX - 20, -71, 40, 1); c.fillRect(doorX - 20, -69, 40, 1);
+            c.fillStyle = "#06040e";
+            c.fillRect(doorX - 22, -64, 44, 64);
+            c.strokeStyle = rgba(hex, 0.35);
+            c.lineWidth = 1;
+            c.strokeRect(doorX - 22, -64, 44, 64);
+            line(c, doorX, -64, doorX, 0);
+            drawPixelArcadeMark(c, doorX, -98, 11);
+        } else {
+            c.fillStyle = "#06040e";
+            c.fillRect(doorX - 22, -64, 44, 64);
+            c.strokeStyle = rgba(hex, 0.3);
+            c.lineWidth = 1;
+            c.strokeRect(doorX - 22, -64, 44, 64);
+            line(c, doorX, -64, doorX, 0);
+            drawEntrance(c, b.def.ent, doorX, hex);
+        }
 
         c.strokeStyle = rgba(hex, 0.4);
         c.lineWidth = 1.5;
@@ -632,22 +707,29 @@
         c.lineTo(rx, 0);
         c.stroke();
 
-        // The name plate, mounted over the door.
+        // The name plate, mounted over the door (PIXEL ARCADE's marquee draws dynamically for its flicker).
         c.strokeStyle = "#251d38";
         c.lineWidth = 2;
-        line(c, doorX, signY + F.plateH / 2, doorX, signY + F.plateH / 2 + 10);
-        c.fillStyle = "rgba(4,2,10,0.9)";
-        c.fillRect(doorX - textW / 2 - 12, signY - F.plateH / 2, textW + 24, F.plateH);
-        c.strokeStyle = hex;
-        c.lineWidth = 1.5;
-        c.shadowBlur = 2 * K * DPR;
-        c.shadowColor = hex;
-        c.strokeRect(doorX - textW / 2 - 12, signY - F.plateH / 2, textW + 24, F.plateH);
-        c.shadowBlur = 0;
-        c.fillStyle = hex;
-        c.textAlign = "center";
-        c.textBaseline = "middle";
-        c.fillText(b.def.name, doorX, signY + 1);
+        if (isArc) {
+            b.signY = signY;
+            b.signW = textW + padXSign * 2;
+            line(c, doorX - textW * 0.32, signY + plateH / 2, doorX - textW * 0.32, signY + plateH / 2 + 16);
+            line(c, doorX + textW * 0.32, signY + plateH / 2, doorX + textW * 0.32, signY + plateH / 2 + 16);
+        } else {
+            line(c, doorX, signY + plateH / 2, doorX, signY + plateH / 2 + 10);
+            c.fillStyle = "rgba(4,2,10,0.9)";
+            c.fillRect(doorX - textW / 2 - 12, signY - plateH / 2, textW + 24, plateH);
+            c.strokeStyle = hex;
+            c.lineWidth = 1.5;
+            c.shadowBlur = 2 * K * DPR;
+            c.shadowColor = hex;
+            c.strokeRect(doorX - textW / 2 - 12, signY - plateH / 2, textW + 24, plateH);
+            c.shadowBlur = 0;
+            c.fillStyle = hex;
+            c.textAlign = "center";
+            c.textBaseline = "middle";
+            c.fillText(b.def.name, doorX, signY + 1);
+        }
 
         // Game posters on hoardings off the building's edge, where the wall is tall enough for them.
         (b.def.posters || []).forEach(function (p) {
@@ -697,22 +779,122 @@
             pRect(c, -5, 9, 2.2, 1.2, "#FF3E3E");
             pRect(c, 2.8, 9, 2.2, 1.2, "#FF3E3E");
         } },
-        shatter: { bg: "#0B0610", draw: function (c) {
-            var rows = ["#FF3E3E", "#FF8C00", "#FFD700", "#39FF14", "#00DFFF"];
-            var gone = { "1_2": 1, "2_2": 1, "2_3": 1, "3_1": 1, "3_2": 1, "3_3": 1, "4_2": 1, "4_4": 1, "0_5": 1 }, r, k;
-            for (r = 0; r < rows.length; r++) {
-                for (k = 0; k < 6; k++) {
-                    if (!gone[r + "_" + k]) pRect(c, -18 + k * 6.1, -23 + r * 3.6, 5.3, 2.8, rows[r]);
-                }
+        pinball: { bg: "#0A0800", draw: function (c) {
+            var lights = ["#39FF14", "#39FF14", "#39FF14"], i;
+            pPoly(c, [-16, -23, 14, -23, 16, -20, 16, 8, 6, 14, -6, 14, -16, 8], "#FFD700", "#141005", 1);
+            pLine(c, [13, -20, 13, 13], "rgba(255,215,0,0.45)", 0.6);
+            pCircle(c, -8, -15, 3, "#FF1493", "rgba(255,20,147,0.3)", 1);
+            pCircle(c, -1, -18, 3, "#00DFFF", "rgba(0,223,255,0.3)", 1);
+            pCircle(c, 6, -14, 3, "#FFD700", "rgba(255,215,0,0.3)", 1);
+            for (i = 0; i < 3; i++) {
+                pCircle(c, -6 + i * 5, -6, 1.8, null, "rgba(57,255,20,0.25)");
+                pCircle(c, -6 + i * 5, -6, 1, null, lights[i]);
             }
-            pLine(c, [-10, 11, -5, 3, 0, -3], "rgba(255,255,255,0.3)", 0.8);
-            pCircle(c, 1, -4.5, 1.5, null, "#FFFFFF");
-            pRect(c, 9, -2, 2.4, 2.4, "#00DFFF");
-            pLine(c, [10.2, -5, 10.2, -3], "rgba(0,223,255,0.5)", 0.6);
-            pRect(c, -9, 11, 12, 2.2, "#FF1493");
-            pRect(c, -9, 11, 12, 0.7, "#FFB6DD");
+            pLine(c, [-10, 7, -3, 11], "#FF1493", 1.6);
+            pLine(c, [8, 7, 1, 11], "#FF1493", 1.6);
+            pLine(c, [-2, -1, 1, 3], "rgba(255,255,255,0.35)", 0.6);
+            pCircle(c, 1.5, 3.8, 1.5, null, "#E8E8F0");
+        } },
+        vector_combat: { bg: "#0E0402", draw: function (c) {
+            var i, a, r;
+            pRect(c, -17, -22, 14, 2, "#3A1A10"); pRect(c, -17, -22, 11, 2, "#00DFFF");
+            pRect(c, 3, -22, 14, 2, "#3A1A10"); pRect(c, 7, -22, 10, 2, "#FF3E3E");
+            pLine(c, [-19, 11, 19, 11], "#FF5F1F", 1);
+            pRect(c, -17, -6, 10, 17, "#00DFFF"); pRect(c, -17, 2, 10, 1, "#00B8D4");
+            pRect(c, -12.2, -2.5, 2, 2, "#0E0402"); pRect(c, -9.4, -2.5, 2, 2, "#0E0402");
+            pLine(c, [-12, -6, -12, -11], "#00DFFF", 1); pCircle(c, -12, -12, 1.2, null, "#00DFFF");
+            pRect(c, 8, -6, 10, 17, "#FF3E3E"); pRect(c, 8, 2, 10, 1, "#C42C2C");
+            pRect(c, 8.4, -2.5, 2, 2, "#0E0402"); pRect(c, 11.2, -2.5, 2, 2, "#0E0402");
+            pLine(c, [10, -6, 8.5, -10.5], "#FF3E3E", 1); pLine(c, [16, -6, 17.5, -10.5], "#FF3E3E", 1);
+            for (i = 0; i < 8; i++) {
+                a = i / 8 * Math.PI * 2; r = (i % 2) ? 3.5 : 7;
+                pLine(c, [0.5, -1, 0.5 + Math.cos(a) * r, -1 + Math.sin(a) * r], i % 2 ? "#FFFFFF" : "#FFD700", 0.9);
+            }
+            pCircle(c, 0.5, -1, 1.6, null, "#FFFFFF");
+        } },
+        pulse: { bg: "#090310", draw: function (c) {
+            c.strokeStyle = "#FF1493"; c.lineWidth = 1;
+            c.strokeRect(-17, -23, 34, 36);
+            pLine(c, [-17, -5, 17, -5], "rgba(255,20,147,0.45)", 0.6);
+            pCircle(c, 0, -5, 5, "rgba(255,20,147,0.45)", null, 0.6);
+            c.beginPath(); c.ellipse(0, -23, 6, 2.2, 0, 0, Math.PI * 2);
+            c.strokeStyle = "#FF3E3E"; c.lineWidth = 1; c.stroke();
+            c.beginPath(); c.ellipse(0, 13, 6, 2.2, 0, 0, Math.PI * 2);
+            c.strokeStyle = "#00DFFF"; c.stroke();
+            pCircle(c, 3, -12, 4.5, "rgba(255,215,0,0.25)", null, 0.6);
+            pCircle(c, 3, -12, 2.8, "rgba(255,215,0,0.5)", null, 0.6);
+            pCircle(c, 3, -12, 1.6, null, "#FFD700");
+            pPoly(c, [-2, -6, 0, -10, 2, -6], null, "#00DFFF");
+            pPoly(c, [-10, 3, -8, -1, -6, 3], null, "#00DFFF");
+            pPoly(c, [8, -16, 10, -20, 12, -16], null, "#FF3E3E");
+            pPoly(c, [-9, -14, -7, -18, -5, -14], null, "#FF3E3E");
         } }
     };
+
+    // PIXEL ARCADE's own mark (city_faction_bases.js): milled pink token with a cyan pixel P.
+    var PIXEL_ARCADE_P = ["111.", "1..1", "111.", "1...", "1..."];
+    function drawPixelArcadeMark(c, cx, cy, s) {
+        var k, r, a, cs, sn;
+        c.save();
+        c.shadowBlur = 0;
+        c.fillStyle = "rgba(6,4,12,0.92)"; c.beginPath(); c.arc(cx, cy, s * 1.45, 0, Math.PI * 2); c.fill();
+        c.fillStyle = "#2a0a1e"; c.beginPath(); c.arc(cx, cy, s * 1.3, 0, Math.PI * 2); c.fill();
+        c.strokeStyle = "#FF1493"; c.lineWidth = 2; c.shadowColor = "#FF1493"; c.shadowBlur = 4;
+        c.beginPath(); c.arc(cx, cy, s * 1.3, 0, Math.PI * 2); c.stroke(); c.shadowBlur = 0;
+        c.strokeStyle = "rgba(255,20,147,0.75)"; c.lineWidth = 1;
+        for (k = 0; k < 24; k++) {
+            a = k * Math.PI / 12; cs = Math.cos(a); sn = Math.sin(a);
+            c.beginPath(); c.moveTo(cx + cs * s * 1.12, cy + sn * s * 1.12); c.lineTo(cx + cs * s * 1.27, cy + sn * s * 1.27); c.stroke();
+        }
+        c.strokeStyle = "rgba(0,223,255,0.55)"; c.beginPath(); c.arc(cx, cy, s * 0.98, 0, Math.PI * 2); c.stroke();
+        var p = Math.max(2, Math.round(s * 0.3)), w = 4 * p, h = 5 * p, x0 = cx - w / 2 + p * 0.5, y0 = cy - h / 2;
+        c.fillStyle = "#00DFFF"; c.shadowColor = "#00DFFF"; c.shadowBlur = 3;
+        for (r = 0; r < 5; r++) for (k = 0; k < 4; k++) if (PIXEL_ARCADE_P[r].charAt(k) === "1") c.fillRect(x0 + k * p, y0 + r * p, p - 0.5, p - 0.5);
+        c.restore();
+    }
+
+    function drawArcadeSignCrest(c, x, y, col, altCol, side) {
+        c.save();
+        c.translate(x, y);
+        c.strokeStyle = altCol; c.lineWidth = 1.2;
+        c.strokeRect(-7.5, 2.5, 15, 5);
+        c.fillStyle = "#160b24"; c.fillRect(-7, 3, 14, 4);
+        c.fillStyle = col; c.fillRect(-5, 4.5, 2, 1.5); c.fillRect(3, 4.5, 2, 1.5);
+        c.strokeStyle = "#E6E8F0"; c.lineWidth = 1.4;
+        line(c, 0, 2.5, side * 2, -4.5);
+        c.fillStyle = col; c.shadowColor = col; c.shadowBlur = 4;
+        c.beginPath(); c.arc(side * 2, -6, 3, 0, Math.PI * 2); c.fill();
+        c.shadowBlur = 0;
+        c.restore();
+    }
+
+    function drawArcadeMarquee(t) {
+        var b = S.arcade;
+        if (!b || !b.signW) return;
+        var flick = REDUCE ? 1 : ((Math.sin(t * 6) > -0.85) ? 1 : 0.45);
+        var hex = b.def.hex, cx = b.w / (2 * K), sy = b.signY, pw = b.signW, ph = 36, px0 = cx - pw / 2, py0 = sy - ph / 2;
+        ctx.save();
+        ctx.translate(b.x, S.gy);
+        ctx.scale(K, K);
+        ctx.globalAlpha = flick;
+        ctx.fillStyle = "rgba(4,2,10,0.94)";
+        ctx.fillRect(px0, py0, pw, ph);
+        ctx.strokeStyle = hex; ctx.lineWidth = 1.5; ctx.shadowBlur = 5; ctx.shadowColor = hex;
+        ctx.strokeRect(px0, py0, pw, ph);
+        ctx.shadowBlur = 0;
+        ctx.strokeStyle = "#00DFFF"; ctx.lineWidth = 1;
+        ctx.strokeRect(px0 + 3.5, py0 + 3.5, pw - 7, ph - 7);
+        drawArcadeSignCrest(ctx, px0 + 16, sy + 1, hex, "#00DFFF", -1);
+        drawArcadeSignCrest(ctx, px0 + pw - 16, sy + 1, hex, "#00DFFF", 1);
+        ctx.fillStyle = "#FFD700";
+        ctx.fillRect(px0 + 5, py0 + 5, 2, 2); ctx.fillRect(px0 + pw - 7, py0 + 5, 2, 2);
+        ctx.fillRect(px0 + 5, py0 + ph - 7, 2, 2); ctx.fillRect(px0 + pw - 7, py0 + ph - 7, 2, 2);
+        ctx.fillStyle = hex; ctx.font = "bold 18px cyber, monospace";
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.shadowColor = hex; ctx.shadowBlur = 6;
+        ctx.fillText(b.def.name, cx, sy + 1);
+        ctx.restore();
+    }
     function pRect(c, x, y, w, h, col) { c.fillStyle = col; c.fillRect(x, y, w, h); }
     function pPath(c, pts, close) {
         c.beginPath();
@@ -1070,25 +1252,62 @@
             c.fillRect(-33, -26, 6, 3); c.strokeRect(-32.5, -25.5, 5, 2);
             c.fillRect(27, -26, 6, 3); c.strokeRect(27.5, -25.5, 5, 2);
         },
-        bin: function (c) {
-            var acc = "#39FF14";
-            c.fillStyle = "#2a2540"; c.fillRect(-13, -3, 26, 3);
-            c.fillStyle = "rgba(57,255,20,0.35)"; c.fillRect(-13, -3, 26, 1);
-            c.fillStyle = "#14101f"; c.strokeStyle = acc; c.lineWidth = 1.3; c.shadowBlur = 3 * K * DPR; c.shadowColor = acc;
-            c.beginPath(); c.moveTo(-11, -3); c.lineTo(-11, -27); c.lineTo(11, -27); c.lineTo(11, -3); c.closePath();
-            c.fill(); c.stroke();
+        bin: function (c, idx, sway, dbl) {
+            var acc = "#39FF14", rgb = "57,255,20", body = "#14101f", head = "#1c1730", sort = ["#39FF14", "#00DFFF", "#FFB300"];
+            var hw = dbl ? 20 : 11, k;
+            var badge = function (cx, cy) {
+                c.fillStyle = "#0a0812"; c.fillRect(cx - 3.5, cy - 4.5, 7, 9);
+                c.strokeStyle = "rgba(" + rgb + ",0.6)"; c.lineWidth = 0.8; c.strokeRect(cx - 3, cy - 4, 6, 8);
+                c.fillStyle = "rgba(" + rgb + ",0.85)";
+                c.fillRect(cx - 2, cy - 2.5, 2, 3); c.fillRect(cx + 0.5, cy + 0.5, 2, 2.5); c.fillRect(cx + 0.5, cy - 0.5, 0.8, 0.8);
+            };
+            c.fillStyle = "#2a2540"; c.fillRect(-hw - 2, -3, hw * 2 + 4, 3);
+            c.fillStyle = "rgba(" + rgb + ",0.35)"; c.fillRect(-hw - 2, -3, hw * 2 + 4, 1);
+            if (dbl) {
+                var unit = function (L, w, hoodCol) {
+                    var topU = -26, ux;
+                    c.fillStyle = body; c.fillRect(L, topU, w, 23);
+                    c.strokeStyle = "rgba(255,255,255,0.05)"; c.lineWidth = 1;
+                    for (ux = L + 3; ux < L + w - 2; ux += 3) { line(c, ux + 0.5, topU + 4, ux + 0.5, -7); }
+                    c.fillStyle = "#0e0b17"; c.fillRect(L + 4, topU + 5, w - 8, 12);
+                    c.strokeStyle = "rgba(" + rgb + ",0.25)"; c.strokeRect(L + 4.5, topU + 5.5, w - 9, 11);
+                    badge(L + w / 2, topU + 11);
+                    c.fillStyle = head;
+                    c.beginPath(); c.moveTo(L - 0.5, topU); c.lineTo(L - 0.5, topU - 8); c.quadraticCurveTo(L - 0.5, topU - 11, L + 3, topU - 11);
+                    c.lineTo(L + w - 3, topU - 11); c.quadraticCurveTo(L + w + 0.5, topU - 11, L + w + 0.5, topU - 8); c.lineTo(L + w + 0.5, topU); c.closePath(); c.fill();
+                    c.strokeStyle = "rgba(" + rgb + ",0.7)"; c.lineWidth = 1; c.stroke();
+                    c.fillStyle = "#050308"; c.fillRect(L + 3, topU - 8, w - 6, 5);
+                    c.fillStyle = hoodCol; c.globalAlpha = 0.85; c.fillRect(L + 3, topU - 3.5, w - 6, 1.5); c.globalAlpha = 1;
+                };
+                unit(-hw, hw - 1, sort[0]);
+                unit(1, hw - 1, sort[1]);
+                c.fillStyle = "#050308"; c.fillRect(-1, -36, 2, 33);
+                c.fillStyle = sort[2]; c.globalAlpha = 0.85; c.fillRect(-1, -30, 2, 3); c.globalAlpha = 1;
+                c.strokeStyle = acc; c.lineWidth = 1.3; c.shadowBlur = 3 * K * DPR; c.shadowColor = acc;
+                c.strokeRect(-hw - 0.5, -26.5, hw * 2 + 1, 23.5);
+                c.shadowBlur = 0;
+                c.fillStyle = "rgba(" + rgb + ",0.55)";
+                c.fillRect(-hw, -25, hw * 2, 1.2); c.fillRect(-hw, -7, hw * 2, 1.2);
+                return;
+            }
+            var top = -24;
+            c.fillStyle = body; c.strokeStyle = acc; c.lineWidth = 1.3; c.shadowBlur = 3 * K * DPR; c.shadowColor = acc;
+            c.fillRect(-hw, top, hw * 2, 21); c.strokeRect(-hw + 0.5, top + 0.5, hw * 2 - 1, 20.5);
             c.shadowBlur = 0;
-            c.fillStyle = "#1c1730";
-            c.beginPath(); c.moveTo(-13, -27); c.lineTo(-11, -33); c.lineTo(11, -33); c.lineTo(13, -27); c.closePath(); c.fill();
-            c.strokeStyle = "rgba(57,255,20,0.7)"; c.lineWidth = 1; c.stroke();
-            c.fillStyle = "#050308"; c.fillRect(-7, -30, 14, 2);
-            c.fillStyle = "rgba(57,255,20,0.35)"; c.fillRect(-11, -23, 22, 1.5);
-            ["#39FF14", "#00DFFF", "#FFB300"].forEach(function (col, k) {
-                var cx = -7 + k * 7;
-                c.fillStyle = "#050308"; c.fillRect(cx - 2.5, -19, 5, 8);
-                c.fillStyle = col; c.globalAlpha = 0.75; c.fillRect(cx - 2.5, -19, 5, 1.5); c.globalAlpha = 1;
-            });
-            c.fillStyle = "rgba(57,255,20,0.15)"; c.fillRect(-10, -8, 20, 3);
+            c.fillStyle = head;
+            [-hw, -1, hw - 2].forEach(function (dx) { c.fillRect(dx, top - 9, 2, 9); });
+            c.fillStyle = "#050308"; c.fillRect(-hw + 2, top - 9, hw - 3, 9); c.fillRect(1, top - 9, hw - 3, 9);
+            c.strokeStyle = "rgba(" + rgb + ",0.35)"; c.lineWidth = 1; c.strokeRect(-hw + 0.5, top - 9, hw * 2 - 1, 9);
+            c.fillStyle = "#1c1730"; c.fillRect(-hw - 1.5, top - 12, hw * 2 + 3, 3);
+            c.strokeStyle = "rgba(" + rgb + ",0.7)"; c.lineWidth = 1; c.strokeRect(-hw - 1, top - 11.5, hw * 2 + 2, 2.5);
+            c.fillStyle = "rgba(" + rgb + ",0.55)";
+            c.fillRect(-hw + 1, top + 4, hw * 2 - 2, 1.2);
+            for (k = 0; k < 3; k++) {
+                c.fillStyle = sort[k]; c.globalAlpha = 0.85; c.fillRect(-7 + k * 5, top + 1.5, 4, 1.5); c.globalAlpha = 1;
+            }
+            badge(0, top + 11);
+            c.fillStyle = "rgba(" + rgb + ",0.55)";
+            c.fillRect(-hw + 1, -8, hw * 2 - 2, 1.2); c.fillRect(-hw + 1, -5.5, hw * 2 - 2, 1);
         },
         vending: function (c, idx) {
             var br = VEND_BRANDS[idx % VEND_BRANDS.length], L = -18, T = -60, W2 = 36, H2 = 60, r, k, ry, sp, ky, kx;
@@ -1258,7 +1477,7 @@
             ctx.save();
             ctx.translate(p.x + (p.kind === "bin" ? sway * 0.6 * K : 0), S.gy);
             ctx.scale(K, K);
-            STREET_DRAW[p.kind](ctx, p.idx, p.kind === "tree" ? sway : 0);
+            STREET_DRAW[p.kind](ctx, p.idx, p.kind === "tree" ? sway : 0, p.dbl);
             ctx.restore();
         });
     }
@@ -1426,16 +1645,49 @@
         c.fillRect(0.4, -8.4, 0.9, 0.9); c.fillRect(-2.2, 6.3, 0.6, 0.6); c.fillRect(7.6, -7.1, 0.6, 0.6);
         c.restore();
     }
+    function patrolScanProgress(t) {
+        if (!patrol || patrol.stopAt < 0) return { dip: 0, scan: 0 };
+        var e = t - patrol.stopAt, d = PATROL.stopDown, sc = PATROL.stopScan, u = PATROL.stopUp;
+        var ease = function (x) { x = clamp(x, 0, 1); return x * x * (3 - 2 * x); };
+        if (e < d) return { dip: ease(e / d), scan: 0 };
+        if (e < d + sc) return { dip: 1, scan: Math.min(1, (e - d) / 0.35, (d + sc - e) / 0.35) };
+        return { dip: 1 - ease((e - d - sc) / u), scan: 0 };
+    }
+    function drawPatrolScanCone(t, info) {
+        if (!info || info.scan <= 0 || !patrol || patrol.paint) return;
+        var ex = patrol.x, ey = patrol.y + info.emitY * PATROL.scale * K, gy = S.gy;
+        if (gy <= ey + 10 * K) return;
+        var half = PATROL.scanHalf, R = (gy - ey) / Math.cos(half), aim = Math.PI / 2, a0 = aim - half, a1 = aim + half, rLens = 10 * K;
+        ctx.save();
+        ctx.beginPath(); ctx.rect(0, 0, W, gy); ctx.clip();
+        var cg = ctx.createRadialGradient(ex, ey, 6 * K, ex, ey, R);
+        cg.addColorStop(0, "rgba(255,40,40," + (0.30 * info.scan).toFixed(3) + ")");
+        cg.addColorStop(0.6, "rgba(255,40,40," + (0.14 * info.scan).toFixed(3) + ")");
+        cg.addColorStop(1, "rgba(255,40,40,0)");
+        ctx.globalCompositeOperation = "screen";
+        ctx.fillStyle = cg;
+        ctx.beginPath(); ctx.moveTo(ex, ey); ctx.arc(ex, ey, R, a0, a1); ctx.closePath(); ctx.fill();
+        var d = rLens + ((t * 1.5) % 1) * (R - rLens);
+        ctx.strokeStyle = "rgba(255,90,90," + (0.45 * info.scan).toFixed(3) + ")"; ctx.lineWidth = 1.2;
+        line(ctx, ex + Math.cos(a0) * d, ey + Math.sin(a0) * d, ex + Math.cos(a1) * d, ey + Math.sin(a1) * d);
+        ctx.globalCompositeOperation = "source-over";
+        ctx.globalAlpha = 0.22 * info.scan; ctx.strokeStyle = "#FF2020"; ctx.lineWidth = 1;
+        line(ctx, ex + Math.cos(a0) * rLens, ey + Math.sin(a0) * rLens, ex + Math.cos(a0) * R, ey + Math.sin(a0) * R);
+        line(ctx, ex + Math.cos(a1) * rLens, ey + Math.sin(a1) * rLens, ex + Math.cos(a1) * R, ey + Math.sin(a1) * R);
+        ctx.restore();
+    }
     function drawPatrol(t) {
-        if (!patrol) return;
+        if (!patrol) return null;
         var c = ctx, col = PATROL.col, type = patrol.type || "patrol";
         var pulse = 0.5 + Math.sin(t * 3) * 0.5, eye = 0.6 + 0.4 * Math.sin(t * 3);
         var emitY = type === "tracker" ? 16 : (type === "response" ? 11 : 14);
+        var stop = patrolScanProgress(t), scanPr = patrol.paint ? 0 : stop.scan;
+        var drawY = patrol.y + stop.dip * PATROL.stopDip * K;
         c.save();
-        c.translate(patrol.x, patrol.y);
+        c.translate(patrol.x, drawY);
         if (patrol.paint) c.rotate(Math.sin(t * 2.8) * 0.14);
         c.scale(patrol.dir * PATROL.scale * K, PATROL.scale * K);
-        if (!patrol.paint) {
+        if (!patrol.paint && scanPr <= 0) {
             var g = c.createLinearGradient(0, emitY - 6, 0, 112);
             g.addColorStop(0, "rgba(255,0,0," + (0.18 * pulse).toFixed(3) + ")");
             g.addColorStop(1, "rgba(255,0,0,0)");
@@ -1486,7 +1738,9 @@
         if (patrol.paint) {
             c.fillStyle = "rgba(255,0,0," + (0.45 + 0.25 * pulse).toFixed(2) + ")"; c.shadowBlur = 6 * DPR; c.shadowColor = "#FF0000";
             c.beginPath(); c.arc(0, 0, 5, 0, Math.PI * 2); c.fill(); c.shadowBlur = 0;
-            drawEyePaint(c, patrol.paint);
+            var cleanA = (scrubber && scrubber.state === "cleaning" && scrubber.job && scrubber.job.type === "overwatch_eye")
+                ? Math.max(0, 1 - scrubber.prog / SCRUB.eyeCleanTime) : 1;
+            c.save(); c.globalAlpha = cleanA; drawEyePaint(c, patrol.paint); c.restore();
         } else {
             c.fillStyle = "rgba(255,0,0," + eye.toFixed(2) + ")"; c.shadowBlur = 14 * DPR; c.shadowColor = "#FF0000";
             c.beginPath(); c.arc(0, 0, 5, 0, Math.PI * 2); c.fill(); c.shadowBlur = 0;
@@ -1497,6 +1751,17 @@
         c.fillStyle = "rgba(255,0,0," + (0.55 + 0.45 * pulse).toFixed(2) + ")"; c.shadowBlur = 8 * DPR; c.shadowColor = "#FF0000";
         c.beginPath(); c.arc(0, emitY, type === "patrol" ? 2.4 : 1.8, 0, Math.PI * 2); c.fill(); c.shadowBlur = 0;
         c.restore();
+        return scanPr > 0 ? { scan: scanPr, emitY: emitY, y: drawY } : null;
+    }
+    function patrolHasTargetBelow() {
+        var R = 26 * K, i;
+        if (Math.abs(op.x - patrol.x) < R) return true;
+        for (i = 0; i < walkers.length; i++) if (walkers[i].st === "walk" && Math.abs(walkers[i].x - patrol.x) < R) return true;
+        for (i = 0; i < S.props.length; i++) {
+            var k = S.props[i].kind;
+            if ((k === "bench" || k === "vending" || k === "bin" || k === "cabinet") && Math.abs(S.props[i].x - patrol.x) < R) return true;
+        }
+        return false;
     }
     function updatePatrol(t, dt) {
         if (!patrol) {
@@ -1506,11 +1771,23 @@
             var dir = Math.random() < 0.5 ? 1 : -1;
             var type = heat >= 80 ? "patrol" : (heat >= 45 ? "response" : (patrolCount % 2 === 0 ? "patrol" : "tracker"));
             patrolCount++;
-            patrol = { x: dir > 0 ? -70 * K : W + 70 * K, y: S.patrolY, dir: dir, type: type };
+            patrol = { x: dir > 0 ? -70 * K : W + 70 * K, y: S.patrolY, dir: dir, type: type, stopAt: -1, nextStop: t + 2 };
+        }
+        if (patrol.stopAt >= 0) {
+            if (patrol.paint || t - patrol.stopAt >= PATROL.stopDown + PATROL.stopScan + PATROL.stopUp) {
+                patrol.stopAt = -1;
+                patrol.nextStop = t + PATROL.stopCooldown;
+            } else {
+                return;
+            }
         }
         var spd = patrol.type === "response" ? PATROL.responseSpeed : PATROL.speed;
         patrol.x += patrol.dir * spd * K * dt;
         patrol.y = S.patrolY + Math.sin(t * 1.3) * 4 * K;
+        if (!patrol.paint && t >= patrol.nextStop && patrol.x > 80 * K && patrol.x < W - 80 * K && patrolHasTargetBelow()) {
+            if (Math.random() < PATROL.stopChance) patrol.stopAt = t;
+            else patrol.nextStop = t + 1.2;
+        }
         if (patrol.x < -80 * K || patrol.x > W + 80 * K) {
             patrol = null;
             patrolAt = t + PATROL.every[0] + Math.random() * PATROL.every[1];
@@ -1547,6 +1824,13 @@
         }
         return best;
     }
+    function scrubJobLive(s) {
+        if (!s.job) return false;
+        if (s.job.type === "overwatch_eye") return !!(patrol && patrol.paint);
+        if (s.job.type === "camera") return !!(S.cam && camPaint && !camIsDown(now()));
+        if (s.job.polish) return true;
+        return tags.indexOf(s.job.tag) !== -1;
+    }
     function updateScrubber(t, dt) {
         if (!scrubber) return;
         var s = scrubber, cruiseY = S.gy - SCRUB.cruise * K;
@@ -1569,6 +1853,16 @@
             if (s.x < lo) { s.x = lo; s.dir = 1; } else if (s.x > hi) { s.x = hi; s.dir = -1; }
             s.y += clamp(cruiseY - s.y, -72 * K * dt, 72 * K * dt);
             s.pad = Math.max(0, s.pad - dt * 3);
+            // 1. High priority: clean painted Overwatch patrol drone
+            if (patrol && patrol.paint && Math.abs(patrol.x - s.x) < 800 * K) {
+                s.job = { type: "overwatch_eye", x: patrol.x, y: patrol.y };
+                s.state = "going"; s.prog = 0; return;
+            }
+            // 2. Medium priority: clean painted street camera
+            if (S.cam && camPaint && !camIsDown(t) && Math.abs(S.cam.x - s.x) < 900 * K) {
+                s.job = { type: "camera", x: S.cam.x, y: S.cam.y };
+                s.state = "going"; s.prog = 0; return;
+            }
             if (t >= s.restUntil) {
                 var best = null, bd = 1e9;
                 tags.forEach(function (g) {
@@ -1584,23 +1878,41 @@
                 if (sp) { s.job = sp; s.state = "going"; s.prog = 0; }
             }
         } else if (s.state === "going") {
-            if (!s.job || (!s.job.polish && tags.indexOf(s.job.tag) === -1)) { s.state = "patrol"; s.job = null; return; }
-            var tx = s.job.x, ty = s.job.y - SCRUB.padDrop * K, dx = tx - s.x, dy = ty - s.y, d = Math.sqrt(dx * dx + dy * dy);
+            if (!scrubJobLive(s)) { s.state = "patrol"; s.job = null; return; }
+            var tx = s.job.x, ty = s.job.y;
+            if (s.job.type === "overwatch_eye") { tx = patrol.x; ty = patrol.y; s.job.x = tx; s.job.y = ty; }
+            else if (s.job.type === "camera") { tx = S.cam.x; ty = S.cam.y; s.job.x = tx; s.job.y = ty; }
+            else { ty = s.job.y - SCRUB.padDrop * K; }
+            var dx = tx - s.x, dy = ty - s.y, d = Math.sqrt(dx * dx + dy * dy);
             if (Math.abs(dx) > 2 * K) s.dir = dx >= 0 ? 1 : -1;
-            var step = SCRUB.workSpeed * K * dt;
+            var mult = s.job.type === "overwatch_eye" ? 1.8 : 1;
+            var step = SCRUB.workSpeed * mult * K * dt;
             if (d <= step || d < 1) { s.x = tx; s.y = ty; s.state = "cleaning"; s.prog = 0; }
             else { s.x += dx / d * step; s.y += dy / d * step; }
         } else if (s.state === "cleaning") {
-            if (!s.job || (!s.job.polish && tags.indexOf(s.job.tag) === -1)) { s.state = "patrol"; s.job = null; s.prog = 0; return; }
+            if (!scrubJobLive(s)) { s.state = "patrol"; s.job = null; s.prog = 0; return; }
             if (s.pad < 1) { s.pad = Math.min(1, s.pad + dt * 3.6); return; }
+            if (s.job.type === "overwatch_eye") {
+                s.x = patrol.x; s.y = patrol.y; s.dir = patrol.dir;
+                s.job.x = patrol.x; s.job.y = patrol.y;
+            } else if (s.job.type === "camera") {
+                s.x = S.cam.x; s.y = S.cam.y;
+                s.job.x = S.cam.x; s.job.y = S.cam.y;
+            }
             s.prog += dt;
             if (t >= s.sparkAt) {
                 s.sparkAt = t + 0.12;
                 addBit(s.job.x + (Math.random() - 0.5) * 26 * K, s.job.y + (Math.random() - 0.5) * 18 * K, (Math.random() - 0.5) * 36 * K, -16 * K, "rgba(200,235,255,0.7)", 1.6 * K, 0.4, 180 * K);
             }
-            var need = s.job.polish ? SCRUB.polishTime : SCRUB.cleanTime;
+            var need = (s.job.type === "overwatch_eye" || s.job.type === "camera") ? SCRUB.eyeCleanTime : (s.job.polish ? SCRUB.polishTime : SCRUB.cleanTime);
             if (s.prog >= need) {
-                if (!s.job.polish) {
+                if (s.job.type === "overwatch_eye") {
+                    patrol.paint = null;
+                    s.restUntil = t + 3;
+                } else if (s.job.type === "camera") {
+                    camPaint = null;
+                    s.restUntil = t + 3;
+                } else if (!s.job.polish) {
                     var idx = tags.indexOf(s.job.tag);
                     if (idx !== -1) tags.splice(idx, 1);
                     s.restUntil = t + SCRUB.rest[0] + Math.random() * SCRUB.rest[1];
@@ -1621,11 +1933,12 @@
         c.save();
         c.lineJoin = "miter"; c.shadowBlur = 0;
         if (s.pad > 0) {
-            var pr = 11 * sk * s.pad, py = sy + SCRUB.padDrop * K * s.pad;
+            var drop = (s.job && (s.job.type === "overwatch_eye" || s.job.type === "camera")) ? 6 : SCRUB.padDrop;
+            var pr = 11 * sk * s.pad, py = sy + drop * K * s.pad;
             c.strokeStyle = "#3a3f4a"; c.lineWidth = 3 * K;
             c.beginPath();
             c.moveTo(sx, sy + 9 * sk);
-            c.lineTo(sx - s.dir * 4 * K, sy + (9 * sk + SCRUB.padDrop * K * s.pad) / 2 + 3 * K);
+            c.lineTo(sx - s.dir * 4 * K, sy + (9 * sk + drop * K * s.pad) / 2 + 3 * K);
             c.lineTo(sx, py);
             c.stroke();
             c.fillStyle = "#1c1f28"; c.beginPath(); c.arc(sx, py, pr, 0, Math.PI * 2); c.fill();
@@ -1793,7 +2106,7 @@
     function camIsDown(t) { return t < camDownUntil; }
 
     function drawCamera(t) {
-        var cam = S.cam, gy = S.gy, down = camIsDown(t);
+        var cam = S.cam, gy = S.gy, down = camIsDown(t), blind = down || !!camPaint;
         var angle = down ? -0.85 : Math.sin(t * CAM.rate) * CAM.sweep;
         var aim = Math.PI / 2 - angle;
         var lensX = cam.x + Math.cos(aim) * 16 * K;
@@ -1802,7 +2115,7 @@
         var cx = lensX + Math.tan(angle) * drop;
         var hw = Math.tan(CAM.half) * drop;
         var x1 = cx - hw, x2 = cx + hw;
-        var cone = down ? null : {
+        var cone = blind ? null : {
             lensX: lensX,
             lensY: lensY,
             cx: cx,
@@ -1870,6 +2183,18 @@
         ctx.fill();
         ctx.shadowBlur = 0;
 
+        if (camPaint && !down) {
+            var camCleanA = (scrubber && scrubber.state === "cleaning" && scrubber.job && scrubber.job.type === "camera")
+                ? Math.max(0, 1 - scrubber.prog / SCRUB.eyeCleanTime) : 1;
+            ctx.save();
+            ctx.globalAlpha = camCleanA;
+            ctx.fillStyle = camPaint;
+            ctx.beginPath(); ctx.arc(16.5 * K, 0.5 * K, 4.2 * K, 0, Math.PI * 2); ctx.fill();
+            ctx.fillRect(11 * K, -5.5 * K, 6 * K, 3 * K);
+            ctx.fillRect(13 * K, 3 * K, 3 * K, 2.5 * K);
+            ctx.restore();
+        }
+
         // Cracked housing when burnt out / disabled
         if (down) {
             ctx.strokeStyle = "rgba(160, 160, 160, 0.6)";
@@ -1882,6 +2207,16 @@
         }
 
         ctx.restore();
+        if (camPaint && !down) {
+            var camCleanA2 = (scrubber && scrubber.state === "cleaning" && scrubber.job && scrubber.job.type === "camera")
+                ? Math.max(0, 1 - scrubber.prog / SCRUB.eyeCleanTime) : 1;
+            ctx.save();
+            ctx.globalAlpha = camCleanA2;
+            ctx.fillStyle = camPaint;
+            ctx.fillRect(lensX - 0.8 * K, lensY + 3 * K, 1.6 * K, 6 * K);
+            ctx.fillRect(lensX + 2.4 * K, lensY + 3 * K, 1.2 * K, 3 * K);
+            ctx.restore();
+        }
         return cone;
     }
 
@@ -2184,8 +2519,9 @@
         var out = S.lamps.map(function (l) {
             return { x: l.x + 26 * K, y: S.gy - LAMP.poleH * K, label: l.broken ? "STREETLIGHT // FAULT" : "STREETLIGHT // OK" };
         });
-        if (S.cam) out.push({ x: S.cam.x, y: S.cam.y + 6 * K, label: camIsDown(t) ? "CAMERA // DISABLED" : "CAMERA // LIVE", red: true });
+        if (S.cam) out.push({ x: S.cam.x, y: S.cam.y + 6 * K, label: camIsDown(t) ? "CAMERA // DISABLED" : (camPaint ? "CAMERA // BLINDED" : "CAMERA // LIVE"), red: true });
         if (scrubber) out.push({ x: scrubber.x, y: scrubber.y, label: t < scrubber.blindUntil ? "SCRUBBER // BLINDED" : "CIVIC // SCRUBBER" });
+        if (binDrone) out.push({ x: binDrone.x, y: binDrone.y, label: binDrone.paint ? "BIN DRONE // BLINDED" : "CIVIC // BIN ROUND" });
         if (patrol) {
             var pName = patrol.type === "response" ? "OW // INTERCEPTOR" : (patrol.type === "tracker" ? "OW // TRACKER" : "OW // PATROL");
             out.push({ x: patrol.x, y: patrol.y, label: patrol.paint ? pName + " // BLINDED" : pName, red: true });
@@ -2225,6 +2561,285 @@
         ctx.restore();
     }
 
+    // ─── Civic Works bin round drone (city_street_life.js) ────────────────
+    function updateBinDrone(t, dt) {
+        if (!binDrone) {
+            if (t < binAt) return;
+            var bins = S.props.filter(function (p) { return p.kind === "bin" && p.x > 36 * K && p.x < W - 36 * K; });
+            if (!bins.length) { binAt = t + 8; return; }
+            var dir = Math.random() < 0.5 ? 1 : -1;
+            bins.sort(function (a, b) { return dir > 0 ? a.x - b.x : b.x - a.x; });
+            if (bins.length > 3) bins = bins.slice(0, 3);
+            binDrone = {
+                q: bins, i: 0, dir: dir,
+                x: dir > 0 ? -70 * K : W + 70 * K,
+                y: S.gy - (BIN_DRONE.cruise + 80) * K,
+                ph: "in", t: 0, hose: 0, paint: null, blindUntil: 0
+            };
+        }
+        var d = binDrone, B = BIN_DRONE;
+        var moveTo = function (tx, ty, sp) {
+            var dx = tx - d.x, dy = ty - d.y, dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist <= sp * dt || dist < 1) { d.x = tx; d.y = ty; return true; }
+            d.x += dx / dist * sp * dt; d.y += dy / dist * sp * dt;
+            if (Math.abs(dx) > 2 * K) d.dir = dx > 0 ? 1 : -1;
+            return false;
+        };
+        if (d.paint) {
+            d.hose = Math.max(0, d.hose - dt * 4);
+            d.x += d.dir * B.speed * 0.8 * K * dt;
+            d.y += (S.gy - B.cruise * K - d.y) * Math.min(1, dt * 2);
+            if (d.x < -80 * K || d.x > W + 80 * K) {
+                binDrone = null;
+                binAt = t + B.every[0] + Math.random() * B.every[1];
+            }
+            return;
+        }
+        var curBin = d.q[d.i];
+        if (d.ph === "in" || d.ph === "next") {
+            if (moveTo(curBin.x, S.gy - B.cruise * K, B.speed * K)) d.ph = "down";
+        } else if (d.ph === "down") {
+            var hoverH = curBin.dbl ? 54 : B.hover;
+            if (moveTo(curBin.x, S.gy - hoverH * K, 54 * K)) { d.ph = "suck"; d.t = B.suckTime; sfx(220, 340, 0.14, "triangle"); }
+        } else if (d.ph === "suck") {
+            d.hose = Math.min(1, d.hose + dt * 3.6);
+            d.t -= dt;
+            if (d.t <= 0) d.ph = "up";
+        } else if (d.ph === "up") {
+            d.hose = Math.max(0, d.hose - dt * 4.5);
+            if (d.hose <= 0 && moveTo(d.x, S.gy - B.cruise * K, 54 * K)) {
+                d.i++;
+                d.ph = d.i < d.q.length ? "next" : "out";
+            }
+        } else if (d.ph === "out") {
+            var exitX = d.dir > 0 ? W + 90 * K : -90 * K;
+            if (moveTo(exitX, S.gy - (B.cruise + 120) * K, B.speed * 1.25 * K)) {
+                binDrone = null;
+                binAt = t + B.every[0] + Math.random() * B.every[1];
+            }
+        }
+    }
+    function drawBinDrone(t) {
+        if (!binDrone) return;
+        var c = ctx, d = binDrone, B = BIN_DRONE, sk = B.scale * K;
+        var bob = REDUCE ? 0 : Math.sin(t * 2.4 + d.x * 0.01) * 1.5 * K;
+        var sx = d.x, sy = d.y + bob, edge = B.col, r, m, u;
+        c.save();
+        c.lineJoin = "miter"; c.shadowBlur = 0;
+        if (d.hose > 0) {
+            var hy0 = sy + 11 * sk, hy1 = hy0 + (S.gy - 34 * K - hy0) * d.hose;
+            c.strokeStyle = "#3a3f4a"; c.lineWidth = 4 * K;
+            line(c, sx, hy0, sx, hy1);
+            c.strokeStyle = "rgba(57,224,122,0.5)"; c.lineWidth = K;
+            for (r = hy0 + 4 * K; r < hy1; r += 5 * K) line(c, sx - 2 * K, r, sx + 2 * K, r);
+            if (d.ph === "suck" && !REDUCE) {
+                c.fillStyle = "rgba(200,200,190,0.6)";
+                for (m = 0; m < 4; m++) {
+                    u = ((t / 0.24) + m / 4) % 1;
+                    c.fillRect(sx - K, hy1 - u * (hy1 - hy0), 2 * K, 2 * K);
+                }
+            }
+        }
+        c.translate(sx, sy);
+        if (d.paint && !REDUCE) c.rotate(Math.sin(t * 2.8) * 0.14);
+        c.scale(d.dir * sk, sk);
+        c.fillStyle = B.body; c.strokeStyle = edge; c.lineWidth = 1.2;
+        owPod(c, -22, -11, 12, 8); c.fillStyle = B.body;
+        owPod(c, 22, -11, 12, 8); c.fillStyle = B.body;
+        var full = Math.min(1, (d.i + (d.ph === "suck" ? 1 - d.t / B.suckTime : 0)) / Math.max(1, d.q.length));
+        owPoly(c, [-17, -13, -3, -13, -2, -9, -18, -9]);
+        c.fillStyle = "rgba(120,255,160,0.55)"; c.fillRect(-15, -12, Math.max(1, 10 * full), 2);
+        c.fillStyle = "#3a3f4a"; c.fillRect(-1, -12.5, 4, 3.5);
+        c.fillStyle = B.body; c.strokeStyle = edge; c.lineWidth = 1.2;
+        c.fillRect(-22, -15, 44, 2); c.strokeRect(-22, -15, 44, 2);
+        c.fillStyle = "#3a3f4a"; c.fillRect(8, -13, 1.5, 4);
+        c.fillStyle = B.body; c.strokeStyle = edge; c.lineWidth = 1.2;
+        c.fillRect(-16, -9, 32, 3); c.strokeRect(-16, -9, 32, 3);
+        c.fillStyle = B.lamp; c.fillRect(-15, -7.6, 1.6, 1.2); c.fillRect(13.4, -7.6, 1.6, 1.2);
+        c.fillStyle = B.body;
+        c.shadowBlur = 3 * DPR; c.shadowColor = edge;
+        owPoly(c, [-17, -6, 13, -6, 17, 0, 12, 9, -13, 9, -17, 4]);
+        c.shadowBlur = 0;
+        hazardBand(c, -12, 6, 22, 3, edge, "#1a1a1a");
+        c.fillStyle = "rgba(255,255,255,0.14)"; c.fillRect(-14, -2, 6, 0.8); c.fillRect(-14, 1, 6, 0.8);
+        c.fillStyle = "#3a3f4a"; c.fillRect(-3, 9, 6, 2.5);
+        c.fillStyle = "#000000"; c.strokeStyle = edge; c.lineWidth = 1;
+        c.beginPath(); c.arc(4, 1, 5, 0, Math.PI * 2); c.fill(); c.stroke();
+        if (!d.paint) {
+            c.fillStyle = B.glass; c.shadowBlur = 6 * DPR; c.shadowColor = edge;
+            c.beginPath(); c.arc(4, 1, 3.4, 0, Math.PI * 2); c.fill(); c.shadowBlur = 0;
+            c.fillStyle = "rgba(255,255,255,0.6)"; c.fillRect(5, -1, 1.4, 1.4);
+        } else {
+            c.fillStyle = "rgba(182,255,200,0.4)";
+            c.beginPath(); c.arc(4, 1, 3.4, 0, Math.PI * 2); c.fill();
+            c.save(); c.translate(4, 1); c.scale(0.82, 0.82); drawEyePaint(c, d.paint); c.restore();
+        }
+        c.restore();
+    }
+
+    // ─── Passers-by with umbrellas (city_street_life.js) ───────────────────
+    function streetDoors() {
+        return S.near.map(function (b) { return b.x + b.w / 2; }).filter(function (dx) { return dx > 12 && dx < W - 12; });
+    }
+    function newWalker(startX) {
+        var doors = streetDoors();
+        var ci = Math.floor(Math.random() * WALKER_COLS.length);
+        var ui = (ci + 1 + Math.floor(Math.random() * (WALKER_COLS.length - 1))) % WALKER_COLS.length;
+        var bw = 18 + Math.random() * 5, bh = 37 + Math.random() * 6;
+        var x = startX !== undefined ? startX : (doors.length ? doors[Math.floor(Math.random() * doors.length)] : Math.random() * W);
+        var dest = null, dir = Math.random() < 0.5 ? 1 : -1;
+        var far = doors.filter(function (dx) { return Math.abs(dx - x) > 120 * K; });
+        if (far.length) { dest = far[Math.floor(Math.random() * far.length)]; dir = dest > x ? 1 : -1; }
+        return {
+            x: x, dest: dest, dir: dir, w: bw, h: bh,
+            col: WALKER_COLS[ci], ucol: WALKER_COLS[ui],
+            sp: 42 + Math.random() * 34, st: startX !== undefined ? "walk" : "out",
+            a: startX !== undefined ? 1 : 0, ph: Math.random() * 6.28, lic: Math.random() < 0.12, hide: false
+        };
+    }
+    function seedWalkers(count) {
+        var n = count || clamp(Math.round(W / 380), 2, WALKER_MAX);
+        for (var i = 0; i < n; i++) walkers.push(newWalker(40 + Math.random() * Math.max(40, W - 80)));
+    }
+    function updateWalkers(t, dt) {
+        var doors = streetDoors(), target = clamp(Math.round(W / 380), 2, WALKER_MAX), i, w, best, d;
+        if (!walkersHidden && heat >= WALKER_HIDE_HEAT) {
+            walkersHidden = true;
+            walkers.forEach(function (wk) {
+                if (wk.st === "hid" || wk.st === "in") return;
+                best = null;
+                doors.forEach(function (dx) { if (best === null || Math.abs(dx - wk.x) < Math.abs(best - wk.x)) best = dx; });
+                if (best !== null) { wk.dest = best; wk.dir = best > wk.x ? 1 : -1; wk.hide = true; }
+            });
+        } else if (walkersHidden && heat < WALKER_BACK_HEAT) {
+            walkersHidden = false;
+            walkers.forEach(function (wk) {
+                if (wk.st === "hid") {
+                    var far = doors.filter(function (dx) { return Math.abs(dx - wk.x) > 120 * K; });
+                    wk.dest = far.length ? far[Math.floor(Math.random() * far.length)] : null;
+                    wk.dir = wk.dest !== null ? (wk.dest > wk.x ? 1 : -1) : (Math.random() < 0.5 ? 1 : -1);
+                    wk.st = "out"; wk.a = 0; wk.hide = false;
+                }
+            });
+        }
+        var live = walkers.filter(function (wk) { return wk.st !== "hid"; }).length;
+        if (!walkersHidden && live < target && Math.random() < 0.65 * dt && doors.length) {
+            walkers.push(newWalker());
+        }
+        for (i = walkers.length - 1; i >= 0; i--) {
+            w = walkers[i];
+            if (w.st === "hid") continue;
+            if (w.st === "out") { w.a = Math.min(1, w.a + dt * 2.5); if (w.a >= 1) w.st = "walk"; continue; }
+            if (w.st === "in") {
+                w.a = Math.max(0, w.a - dt * 2.5);
+                if (w.a <= 0) { if (w.hide) { w.st = "hid"; } else walkers.splice(i, 1); }
+                continue;
+            }
+            var sp = (w.hide ? w.sp * 1.7 : w.sp) * 1.15 * K;
+            w.x += w.dir * sp * dt;
+            w.ph += sp * 0.22 * dt;
+            if (w.dest !== null && (w.dir > 0 ? w.x >= w.dest : w.x <= w.dest)) {
+                w.x = w.dest;
+                w.st = "in";
+            } else if (w.dest === null && (w.x < -30 * K || w.x > W + 30 * K)) {
+                walkers.splice(i, 1);
+            }
+        }
+    }
+    function drawWalkers() {
+        var gy = S.gy, i, w, ww, wh, bob, x, y, es, ex, hx, top, half, cx;
+        for (i = 0; i < walkers.length; i++) {
+            w = walkers[i];
+            if (w.st === "hid" || w.a <= 0) continue;
+            ww = w.w * K; wh = w.h * K;
+            bob = (!REDUCE && w.st === "walk") ? Math.abs(Math.sin(w.ph)) * 0.9 * K : 0;
+            x = w.x - ww / 2; y = gy - wh - bob;
+            ctx.save();
+            ctx.globalAlpha = w.a;
+            ctx.fillStyle = "rgba(0,0,0," + (0.38 * w.a).toFixed(3) + ")";
+            ctx.fillRect(x - 1.5 * K, gy, ww + 3 * K, 3);
+            ctx.fillStyle = w.col;
+            roundRect(ctx, x, y, ww, wh, 3 * K);
+            ctx.fill();
+            ctx.fillStyle = "#FFFFFF";
+            es = 3.2 * K; ex = w.x + w.dir * 2.6 * K;
+            ctx.fillRect(ex - 5.4 * K, y + 8 * K, es, es);
+            ctx.fillRect(ex + 2.2 * K, y + 8 * K, es, es);
+            // Umbrella (side on: shaft, crook, faceted dark canopy with neon rim)
+            hx = w.dir > 0 ? x + ww - 3 * K : x + 3 * K;
+            top = y - 12 * K; half = ww / 2 + 9 * K; cx = hx - w.dir * 4 * K;
+            ctx.strokeStyle = "#5a6070"; ctx.lineWidth = 1.2 * K;
+            line(ctx, hx, y + wh * 0.55, cx, top);
+            line(ctx, hx, y + wh * 0.55, hx + w.dir * 2 * K, y + wh * 0.55 + 2 * K);
+            ctx.fillStyle = "rgba(8,10,18,0.92)"; ctx.strokeStyle = w.ucol; ctx.lineWidth = 1.4 * K;
+            ctx.shadowColor = w.ucol; ctx.shadowBlur = 3 * DPR;
+            ctx.beginPath();
+            ctx.moveTo(cx - half, top + 6 * K); ctx.lineTo(cx - half * 0.6, top + K);
+            ctx.lineTo(cx, top - 3 * K); ctx.lineTo(cx + half * 0.6, top + K);
+            ctx.lineTo(cx + half, top + 6 * K); ctx.lineTo(cx + half * 0.5, top + 4 * K);
+            ctx.lineTo(cx, top + 5 * K); ctx.lineTo(cx - half * 0.5, top + 4 * K);
+            ctx.closePath(); ctx.fill(); ctx.stroke();
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = "#5a6070"; ctx.fillRect(cx - 0.6 * K, top - 6 * K, 1.2 * K, 3 * K);
+            if (w.lic) { ctx.fillStyle = "#E8D070"; ctx.fillRect(hx - 1.5 * K + w.dir * 0.5 * K, y + wh * 0.55 - 7 * K, 3 * K, 4 * K); }
+            ctx.restore();
+        }
+    }
+
+    // ─── Sewer drain steam blasts (city_sewer_vents.js) ────────────────────
+    function spawnSteam(gx) {
+        for (var k = 0; k < 32; k++) {
+            var core = k < 8;
+            steam.push({
+                x: gx + (Math.random() - 0.5) * 30 * K,
+                y: S.gy - Math.random() * 3 * K,
+                vx: (Math.random() - 0.5) * 28 * K,
+                vy: -(core ? 24 + Math.random() * 28 : 54 + Math.random() * 64) * K,
+                size: (core ? 4.5 + Math.random() * 2.5 : 3.5 + Math.random() * 2.5) * K,
+                grow: (6 + Math.random() * 4) * K,
+                alpha: core ? 0.22 : 0.14 + Math.random() * 0.08,
+                decay: 0.18 + Math.random() * 0.1,
+                delay: Math.random() * 0.16,
+                phase: Math.random() * Math.PI * 2
+            });
+        }
+    }
+    function updateSteam(t, dt) {
+        if (t >= steamAt && S.sewers.length) {
+            steamAt = t + 11 + Math.random() * 11;
+            var vis = S.sewers.filter(function (sw) { return sw.x > 60 * K && sw.x < W - 60 * K; });
+            if (vis.length) {
+                var sw = vis[Math.floor(Math.random() * vis.length)];
+                spawnSteam(sw.x);
+                hiss(0.45, "bandpass", 1200, 0.06);
+            }
+        }
+        for (var i = steam.length - 1; i >= 0; i--) {
+            var p = steam[i];
+            if (p.delay > 0) { p.delay -= dt; continue; }
+            p.x += p.vx * dt + Math.sin(t * 2 + p.phase) * 12 * K * dt;
+            p.y += p.vy * dt;
+            p.vy *= Math.pow(0.42, dt);
+            p.size += p.grow * dt;
+            p.alpha -= p.decay * dt;
+            if (p.alpha <= 0) steam.splice(i, 1);
+        }
+    }
+    function drawSteam() {
+        if (!steam.length) return;
+        ctx.save();
+        ctx.fillStyle = "rgb(180,200,210)";
+        for (var i = 0; i < steam.length; i++) {
+            var p = steam[i];
+            if (p.delay > 0 || p.alpha <= 0) continue;
+            ctx.globalAlpha = p.alpha;
+            ctx.beginPath(); ctx.ellipse(p.x, p.y, p.size, p.size * 1.15, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.globalAlpha = p.alpha * 0.35;
+            ctx.beginPath(); ctx.ellipse(p.x, p.y, p.size * 1.5, p.size * 1.6, 0, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.restore();
+    }
+
     function drawRain(dt) {
         ctx.save();
         ctx.strokeStyle = "rgba(57,255,20,0.26)";
@@ -2254,6 +2869,9 @@
             updateCars(dt);
             updatePatrol(t, dt);
             updateScrubber(t, dt);
+            updateBinDrone(t, dt);
+            updateWalkers(t, dt);
+            updateSteam(t, dt);
             return;
         }
 
@@ -2322,11 +2940,16 @@
         updateCars(dt);
         updatePatrol(t, dt);
         updateScrubber(t, dt);
+        updateBinDrone(t, dt);
+        updateWalkers(t, dt);
+        updateSteam(t, dt);
     }
 
-    function updateHeat(t, dt, cone) {
+    function updateHeat(t, dt, camInfo) {
+        var cone = camInfo && camInfo.cone, pScan = camInfo && camInfo.patrolScan;
+        var patrolReach = pScan ? (S.gy - pScan.y) * Math.tan(PATROL.scanHalf) : PATROL.beam * K;
         // seen in the camera's cone, or under the patrol drone's beam (unless its eye has been painted over)
-        seen = (!!cone && op.x > cone.x1 && op.x < cone.x2) || (!!patrol && !patrol.paint && Math.abs(op.x - patrol.x) < PATROL.beam * K);
+        seen = (!!cone && op.x > cone.x1 && op.x < cone.x2) || (!!patrol && !patrol.paint && Math.abs(op.x - patrol.x) < patrolReach);
         tags.forEach(function (g) { if (seen && t - g.t0 < TAG_TIME) g.seen = true; });
         if (seen) { heat += HEAT.rise * dt; lastSeen = t; }
         else if (t - lastSeen > HEAT.grace) heat -= HEAT.fall * dt;
@@ -2349,24 +2972,31 @@
         ctx.drawImage(backLayer, 0, 0, W, H);
         drawCars();
         ctx.drawImage(frontLayer, 0, 0, W, H);
+        drawArcadeMarquee(t);
         drawTags(t);
         drawArcadeDoor(t);
         drawProps(t);
         S.lamps.forEach(drawLamp);
         var cone = S.cam ? drawCamera(t) : null;
+        drawWalkers();
         drawScrubber(t);
-        drawPatrol(t);
+        drawBinDrone(t);
+        var patrolScan = drawPatrol(t);
         drawBits(dt);
+        drawSteam();
         drawOperator();
         drawDrone();
-        if (cone && S.cam && !camIsDown(t)) {
+        if (cone && S.cam && !camIsDown(t) && !camPaint) {
             drawCameraBeamWash(t, cone);
+        }
+        if (patrolScan) {
+            drawPatrolScanCone(t, patrolScan);
         }
         drawFloats(t);
         drawHold(t);
         drawScan(t);
         if (dt > 0) drawRain(dt);
-        return cone;
+        return { cone: cone, patrolScan: patrolScan };
     }
 
     // ─── The tune & Volume Controls ────────────────────────────────────────
@@ -2508,9 +3138,9 @@
         for (var i = 0; i < S.props.length; i++) {
             var prop = S.props[i];
             if (prop.kind === "bench") continue;
-            var box = PROP_BOX[prop.kind];
+            var hw = (prop.kind === "bin" && prop.dbl) ? 22 : PROP_BOX[prop.kind][0];
             var dist = Math.abs(op.x - prop.x);
-            var reach = (box[0] + 24) * K;
+            var reach = (hw + 24) * K;
             if (dist <= reach && dist < bestDist) {
                 bestDist = dist;
                 bestProp = prop;
@@ -2562,8 +3192,31 @@
             if (clock < (op.sprayUntil || 0)) return;
             op.sprayUntil = clock + TAG_TIME;
             if (op.sitting) op.sitting = false;
-            var faceDir = op.dir || 1;
-            sprayAt(op.x + faceDir * 12 * K, S.gy - op.jumpY - OP.h * K * 0.7, clock);
+            var faceDir = op.dir || 1, sxF = op.x + faceDir * 12 * K, syF = S.gy - op.jumpY - OP.h * K * 0.7;
+            var pyF = patrol ? patrol.y + patrolScanProgress(clock).dip * PATROL.stopDip * K : 0;
+            if (patrol && !patrol.paint && Math.abs(sxF - patrol.x) <= 58 * K && Math.abs(syF - pyF) <= 36 * K) {
+                patrol.paint = OP_COLOURS[op.colour];
+                hiss(0.5, "highpass", 3600, 0.1);
+                return;
+            }
+            if (scrubber && clock >= scrubber.blindUntil && Math.abs(sxF - scrubber.x) <= 44 * K && Math.abs(syF - scrubber.y) <= 34 * K) {
+                scrubber.paint = OP_COLOURS[op.colour];
+                scrubber.blindUntil = clock + SCRUB.blindTime;
+                scrubber.state = "patrol"; scrubber.job = null; scrubber.prog = 0;
+                hiss(0.5, "highpass", 3600, 0.1);
+                return;
+            }
+            if (binDrone && !binDrone.paint && Math.abs(sxF - binDrone.x) <= 44 * K && Math.abs(syF - binDrone.y) <= 34 * K) {
+                binDrone.paint = OP_COLOURS[op.colour];
+                hiss(0.5, "highpass", 3600, 0.1);
+                return;
+            }
+            if (S.cam && !camIsDown(clock) && !camPaint && near(sxF, syF, S.cam.x, S.cam.y + 4 * K, 36 * K)) {
+                camPaint = OP_COLOURS[op.colour];
+                hiss(0.5, "highpass", 3600, 0.1);
+                return;
+            }
+            sprayAt(sxF, syF, clock);
         } else if (code === "KeyE") {
             handleKeyE(clock);
         }
@@ -2668,7 +3321,8 @@
         var pad = Math.max(16, 16 * K);
         if (near(x, y, op.x, S.gy - OP.h * K / 2, Math.max(pad, OP.h * K / 2 + 4))) { setOperatorColour(op.colour + 1); sfx(660, 990, 0.09); return; }
         if (near(x, y, drone.x, drone.y, pad + 4)) { if (!rested("scan", "scan", t)) return; scan = { t0: t, x: op.x, y: S.gy - OP.h * K / 2 }; sfx(420, 1680, 0.5, "sine"); return; }
-        if (patrol && Math.abs(x - patrol.x) <= 58 * K && Math.abs(y - patrol.y) <= 26 * K) {
+        var pyNow = patrol ? patrol.y + patrolScanProgress(t).dip * PATROL.stopDip * K : 0;
+        if (patrol && Math.abs(x - patrol.x) <= 58 * K && Math.abs(y - pyNow) <= 26 * K) {
             patrol.paint = OP_COLOURS[op.colour];
             hiss(0.5, "highpass", 3600, 0.1);
             return;
@@ -2679,6 +3333,11 @@
             scrubber.state = "patrol";
             scrubber.job = null;
             scrubber.prog = 0;
+            hiss(0.5, "highpass", 3600, 0.1);
+            return;
+        }
+        if (binDrone && !binDrone.paint && Math.abs(x - binDrone.x) <= 36 * K && Math.abs(y - binDrone.y) <= 24 * K) {
+            binDrone.paint = OP_COLOURS[op.colour];
             hiss(0.5, "highpass", 3600, 0.1);
             return;
         }
@@ -2693,6 +3352,7 @@
                 }
             } else {
                 camDownUntil = t + CAM.downFor;
+                camPaint = null;
                 sfx(520, 70, 0.3, "triangle");
                 if (seen) heat = clamp(heat + HEAT.cam, 0, 100);
                 for (var sp = 0; sp < 12; sp++) {
@@ -2714,7 +3374,8 @@
         if (S.arcade && Math.abs(x - (S.arcade.x + S.arcade.w / 2)) <= 24 * K && y < S.gy && y > S.gy - 68 * K) { toggleArcade(t); return; }
         for (i = 0; i < S.props.length; i++) {
             p = S.props[i]; box = PROP_BOX[p.kind];
-            if (Math.abs(x - p.x) <= Math.max(12, box[0] * K) && y < S.gy + 4 && y > S.gy - box[1] * K - 4) {
+            var propHW = (p.kind === "bin" && p.dbl) ? 22 : box[0];
+            if (Math.abs(x - p.x) <= Math.max(12, propHW * K) && y < S.gy + 4 && y > S.gy - box[1] * K - 4) {
                 if (useProp(p, t)) return;
                 break;
             }
@@ -2726,10 +3387,13 @@
         build();
 
         // Watches the canvas itself: its box can change without a window resize.
-        var resizeTimer = 0;
+        var resizeTimer = 0, wordmarkRaf = 0;
         var onResize = function () {
             var r = canvas.getBoundingClientRect();
-            if (Math.round(r.width) === W && Math.round(r.height) === H && boxesSig(copyBoxes(r)) === copySig) return;
+            var rw = Math.max(1, Math.round(r.width));
+            cancelAnimationFrame(wordmarkRaf);
+            wordmarkRaf = requestAnimationFrame(function () { drawWordmark(rw); });
+            if (rw === W && Math.round(r.height) === H && boxesSig(copyBoxes(r)) === copySig) return;
             clearTimeout(resizeTimer);
             resizeTimer = setTimeout(function () { build(); if (REDUCE) frame(0.9, 0); }, 120);
         };

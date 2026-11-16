@@ -196,7 +196,7 @@
         opts = opts || {};
         var volume = typeof opts.volume === "number" ? opts.volume : 0.6;
         var ctx = null, master = null, out = null, street = null, house = null, sidechain = null, delayNode = null, reverbIn = null;
-        var on = false, timer = 0, tension = 0.2;
+        var on = false, timer = 0, stopTimer = 0, tension = 0.2;
         var song = null, baseBpm = 96, bpm = 96, targetBpm = 96, bpmRamp = 0.1;
         var step = 0, nextTime = 0, barCount = 0, section = 0, sectionBar = 0, barLevel = 1;
         var heatVal = 0, seenNow = false, heatTier = 0, heatSeen = false;
@@ -690,6 +690,14 @@
                 wire();
                 newSong(null);
             }
+            clearTimeout(stopTimer);
+            stopTimer = 0;
+            if (master) {
+                var t = ctx.currentTime;
+                master.gain.cancelScheduledValues(t);
+                master.gain.setValueAtTime(master.gain.value, t);
+                master.gain.setTargetAtTime(volume, t, 0.03);
+            }
             ctx.resume();
             on = true;
             nextTime = 0;
@@ -701,7 +709,20 @@
             if (tune) stopTune();
             on = false;
             clearInterval(timer);
-            if (ctx) ctx.suspend();
+            clearTimeout(stopTimer);
+            if (!ctx) return;
+            if (master && ctx.state === "running") {
+                var t = ctx.currentTime;
+                master.gain.cancelScheduledValues(t);
+                master.gain.setValueAtTime(master.gain.value, t);
+                master.gain.linearRampToValueAtTime(0, t + 0.07);
+                stopTimer = setTimeout(function () {
+                    stopTimer = 0;
+                    if (!on && ctx && ctx.state === "running") ctx.suspend();
+                }, 90);
+            } else {
+                ctx.suspend();
+            }
         }
         function blip(freq, slideTo, dur, wave) {
             if (!on || !ctx || ctx.state !== "running") return;
@@ -713,8 +734,26 @@
             stop: stop,
             toggle: function () { if (on) stop(); else start(); return on; },
             pause: function () { if (ctx && on) ctx.suspend(); },
-            resume: function () { if (ctx && on) ctx.resume(); },
-            setVolume: function (v) { volume = v; if (master) master.gain.setTargetAtTime(v, ctx.currentTime, 0.05); },
+            resume: function () {
+                if (ctx && on) {
+                    if (master) {
+                        var t = ctx.currentTime;
+                        master.gain.cancelScheduledValues(t);
+                        master.gain.setValueAtTime(0, t);
+                        master.gain.linearRampToValueAtTime(volume, t + 0.04);
+                    }
+                    ctx.resume();
+                }
+            },
+            setVolume: function (v) {
+                volume = v;
+                if (master && ctx) {
+                    var t = ctx.currentTime;
+                    master.gain.cancelScheduledValues(t);
+                    master.gain.setValueAtTime(master.gain.value, t);
+                    master.gain.setTargetAtTime(v, t, 0.05);
+                }
+            },
             setTension: function (v) {
                 tension = clamp(v, 0, 1);
             },
