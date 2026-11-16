@@ -224,13 +224,11 @@
         [[62, "bench"], [184, "vending"], [250, "booth"]],
         [[50, "tree"], [205, "cabinet"], [264, "hydrant"]],
         [[40, "bin"], [170, "bench"]],
-        [[48, "vending"], [230, "bench"], [290, "bin"]],
+        [[48, "bin"], [230, "bench"], [290, "bin"]],
         [[62, "cabinet"], [200, "tree"]],
-        [[60, "bench"], [200, "vending"], [252, "bin"]]
+        [[60, "bench"], [252, "bin"]]
     ];
     var VEND_BRANDS = [
-        { name: "COOLANT+", col: "#7CF9FF", stock: ["#7CF9FF", "#39FF14", "#FFFFFF"] },
-        { name: "SYNTH SNAX", col: "#FF7A00", stock: ["#FF7A00", "#FFD24A", "#FF1493"] },
         { name: "LUMEN", col: "#7CFFD4", stock: ["#7CFFD4", "#B8FFF0", "#3DE0B0"] }
     ];
     var CABINET_STREET = { body: "#0f2418", face: "#143222", edge: "#2FBF71", dim: "rgba(47,191,113,0.45)" };
@@ -272,7 +270,7 @@
     var BIN_DRONE = { col: "#39E07A", body: "#15171e", glass: "#B6FFC8", lamp: "rgba(170,255,190,0.85)",
         scale: 1.25, cruise: 110, hover: 51, speed: 96, suckTime: 2.0, first: 13, every: [20, 14], blindTime: 10 };
     // Street passers-by (city_street_life.js): blocks with neon umbrellas in the rain, ducking into doors at heat 45.
-    var WALKER_MAX = 4, WALKER_HIDE_HEAT = 45, WALKER_BACK_HEAT = 38;
+    var WALKER_MAX = 2, WALKER_HIDE_HEAT = 45, WALKER_BACK_HEAT = 38;
     var WALKER_COLS = ["#FF1493", "#00DFFF", "#39FF14", "#FF7A00", "#8A2BE2", "#FFD700"];
     var KERB_H = 8;
     // What can be clicked in the street, as [half-width, height] in the game's pixels.
@@ -289,7 +287,7 @@
     var LAMP = { poleH: 168, baseW: 12, baseH: 38, taperH: 10, doorW: 8, doorTop: 35, doorBot: 23 };
     // Overwatch hardware: black body, grey edge, red only in the eye and the beam.
     var CAM = { body: "#000000", edge: "#6E6E6E", eye: "#FF0000", sweep: 0.75, half: 0.2, rate: 0.45, downFor: 12, height: 150 };
-    var OP = { w: 26, h: 38, speed: 150, still: 48 };     // still: how near the pointer may come before the operator stops following
+    var OP = { w: 26, h: 38, speed: 150, still: 48, gravity: 880, jumpV: 390, coyote: 0.085, jumpBuf: 0.095 };
     var OP_COLOURS = ["#FF1493", "#00DFFF", "#39FF14", "#FF3E00", "#8A2BE2"];
     var HEAT = { rise: 34, fall: 14, grace: 1.2, tag: 20, cam: 30 };
     var SCAN = { range: 900, time: 0.7, show: 6 };
@@ -305,8 +303,9 @@
         return true;
     }
 
-    var op = { x: 0, dir: 1, target: 0, wanderAt: 0, colour: 0, jumpY: 0, vy: 0, sprayUntil: 0, sitting: false };
+    var op = { x: 0, vx: 0, dir: 1, target: 0, wanderAt: 0, colour: 0, jumpY: 0, vy: 0, coyote: 0, jumpBuf: 0, plat: null, dropId: null, dropUntil: 0, sprayUntil: 0, sitting: false };
     var keys = { left: false, right: false };
+    function clearKeys() { keys.left = false; keys.right = false; }
     var drone = { x: 0, y: 0, barrelRollTimer: 0 };
     var tags = [], tagNext = 0, scan = null, camDownUntil = 0, camPaint = null;
     var cars = [], patrol = null, patrolAt = PATROL.first, patrolCount = 0, scrubber = null, binDrone = null, binAt = BIN_DRONE.first, walkers = [], walkersHidden = false, steam = [], steamAt = 7, bits = [], floats = [];
@@ -343,7 +342,7 @@
 
     function build() {
         var r = canvas.getBoundingClientRect();
-        var oldW = W, broken = S ? S.lamps.map(function (l) { return l.broken; }) : [];
+        var oldW = W, oldK = K, broken = S ? S.lamps.map(function (l) { return l.broken; }) : [];
         W = Math.max(1, Math.round(r.width));
         H = Math.max(1, Math.round(r.height));
         DPR = Math.min(window.devicePixelRatio || 1, 2);
@@ -447,7 +446,7 @@
             for (i = 0; i < maxCars() / 2; i++) spawnCar(true);
             seedWalkers();
         } else {
-            seedWalkers(2);
+            seedWalkers(1);
         }
 
         rain.length = 0;
@@ -476,9 +475,19 @@
             blindUntil: 0,
             paint: null,
             pad: 0,
-            sparkAt: 0
+            sparkAt: 0,
+            bounceY: 0,
+            sway: 0,
+            riderWas: false,
+            offTime: 1,
+            dx: 0
         };
         op.x = oldW ? clamp(op.x * W / oldW, 30, W - 30) : W * 0.62;
+        if (oldW && oldK > 0) op.jumpY = Math.max(0, op.jumpY * (K / oldK));
+        op.plat = null;
+        op.dropId = null;
+        op.dropUntil = 0;
+        op.vx = 0;
         op.target = op.x;
         drone.x = op.x; drone.y = gy - (OP.h + 26) * K;
     }
@@ -526,6 +535,11 @@
                 }
             }
         });
+        var mist = c.createLinearGradient(0, gy * 0.28, 0, gy);
+        mist.addColorStop(0, "rgba(8, 10, 26, 0)");
+        mist.addColorStop(1, "rgba(10, 12, 32, 0.34)");
+        c.fillStyle = mist;
+        c.fillRect(0, gy * 0.28, W, gy * 0.72);
     }
 
     function drawFront(c) {
@@ -626,7 +640,16 @@
             var x0 = startX + (spaceW - (n * F.bayW - 8)) / 2, bw = F.bayW - 14, i, sx;
             for (i = 0; i < n; i++) {
                 sx = x0 + i * F.bayW;
-                if (seed() > 0.42) { c.fillStyle = rgba(hex, 0.09); c.fillRect(sx, sfTop + 16, bw, F.storeH - 28); }
+                c.fillStyle = "rgba(4,4,12,0.72)";
+                c.fillRect(sx, sfTop + 16, bw, F.storeH - 28);
+                c.fillStyle = rgba(hex, seed() > 0.42 ? 0.08 : 0.035);
+                c.fillRect(sx, sfTop + 16, bw, F.storeH - 28);
+                // Dim interior shelf / counter lines + subtle diagonal pane sheen
+                c.fillStyle = rgba(hex, 0.07);
+                c.fillRect(sx + 4, sfTop + 34, bw - 8, 2);
+                c.fillRect(sx + 4, sfTop + 52, bw - 8, 2);
+                c.fillStyle = "rgba(255,255,255,0.035)";
+                c.beginPath(); c.moveTo(sx + 4, sfTop + 16); c.lineTo(sx + 14, sfTop + 16); c.lineTo(sx + 2, -12); c.lineTo(sx, -12); c.closePath(); c.fill();
                 c.strokeStyle = rgba(hex, 0.32);
                 c.lineWidth = 1;
                 c.strokeRect(sx, sfTop + 16, bw, F.storeH - 28);
@@ -868,18 +891,55 @@
         c.restore();
     }
 
+    var arcadeFlick = { at: 4.5, steps: [], idx: 0, stepEnd: 0, val: 1 };
+    function marqueeFlicker(t) {
+        if (REDUCE) return 1;
+        if (arcadeFlick.idx < arcadeFlick.steps.length) {
+            if (t < arcadeFlick.stepEnd) return arcadeFlick.val;
+            arcadeFlick.idx++;
+            if (arcadeFlick.idx < arcadeFlick.steps.length) {
+                var st = arcadeFlick.steps[arcadeFlick.idx];
+                arcadeFlick.val = st.a;
+                arcadeFlick.stepEnd = t + st.d;
+                return arcadeFlick.val;
+            }
+            arcadeFlick.steps.length = 0;
+            arcadeFlick.idx = 0;
+            arcadeFlick.val = 1;
+            arcadeFlick.at = t + 4.5 + Math.random() * 7;
+            return 1;
+        }
+        if (t >= arcadeFlick.at) {
+            var count = 2 + Math.floor(Math.random() * 4);
+            var steps = [], i;
+            for (i = 0; i < count; i++) {
+                var dim = (i % 2 === 0);
+                steps.push({
+                    a: dim ? (0.36 + Math.random() * 0.36) : (0.9 + Math.random() * 0.1),
+                    d: dim ? (0.035 + Math.random() * 0.065) : (0.04 + Math.random() * 0.08)
+                });
+            }
+            arcadeFlick.steps = steps;
+            arcadeFlick.idx = 0;
+            arcadeFlick.val = steps[0].a;
+            arcadeFlick.stepEnd = t + steps[0].d;
+            return arcadeFlick.val;
+        }
+        return 1;
+    }
+
     function drawArcadeMarquee(t) {
         var b = S.arcade;
         if (!b || !b.signW) return;
-        var flick = REDUCE ? 1 : ((Math.sin(t * 6) > -0.85) ? 1 : 0.45);
+        var flick = marqueeFlicker(t);
         var hex = b.def.hex, cx = b.w / (2 * K), sy = b.signY, pw = b.signW, ph = 36, px0 = cx - pw / 2, py0 = sy - ph / 2;
         ctx.save();
         ctx.translate(b.x, S.gy);
         ctx.scale(K, K);
-        ctx.globalAlpha = flick;
         ctx.fillStyle = "rgba(4,2,10,0.94)";
         ctx.fillRect(px0, py0, pw, ph);
-        ctx.strokeStyle = hex; ctx.lineWidth = 1.5; ctx.shadowBlur = 5; ctx.shadowColor = hex;
+        ctx.globalAlpha = flick;
+        ctx.strokeStyle = hex; ctx.lineWidth = 1.5; ctx.shadowBlur = 5 * flick; ctx.shadowColor = hex;
         ctx.strokeRect(px0, py0, pw, ph);
         ctx.shadowBlur = 0;
         ctx.strokeStyle = "#00DFFF"; ctx.lineWidth = 1;
@@ -891,7 +951,7 @@
         ctx.fillRect(px0 + 5, py0 + ph - 7, 2, 2); ctx.fillRect(px0 + pw - 7, py0 + ph - 7, 2, 2);
         ctx.fillStyle = hex; ctx.font = "bold 18px cyber, monospace";
         ctx.textAlign = "center"; ctx.textBaseline = "middle";
-        ctx.shadowColor = hex; ctx.shadowBlur = 6;
+        ctx.shadowColor = hex; ctx.shadowBlur = 6 * flick;
         ctx.fillText(b.def.name, cx, sy + 1);
         ctx.restore();
     }
@@ -1420,36 +1480,66 @@
         ctx.restore();
     }
 
-    // The comm booth: two posts and a hood, solid glass, the wall unit with its screen and handset.
-    // While a call is on, the screen is lit and the handset is off its hook.
+    // The comm booth (city_comm_booths.js): steel frame, full-height glass, gold-bezeled wall unit,
+    // mini CRT, keypad matrix, status LED, and contoured handset with coiled cord.
     STREET_DRAW.booth = function (c) {
-        var col = HOLD.col, onCall = !!holdCall;
+        var col = HOLD.col, onCall = !!holdCall, kr, kc2, cl;
         c.scale(0.75, 0.75);
-        c.fillStyle = "#242c36"; c.fillRect(-22, -4, 44, 4);
-        c.strokeStyle = "rgba(143,184,200,0.65)"; c.lineWidth = 1.2; c.strokeRect(-21.5, -3.5, 43, 3);
-        c.fillStyle = "#111820"; c.strokeStyle = col; c.lineWidth = 1.2;
-        c.fillRect(-20, -8, 5, 4); c.strokeRect(-20, -8, 5, 4);
-        c.fillRect(15, -8, 5, 4); c.strokeRect(15, -8, 5, 4);
+        c.fillStyle = "#2a2540"; c.fillRect(-20, -4, 40, 5);
+        c.fillStyle = "rgba(143,184,200,0.35)"; c.fillRect(-20, -4, 40, 1);
         c.strokeStyle = col; c.lineWidth = 2;
         strokePath(c, [-18, -4, -18, -76, 18, -4, 18, -76]);
         c.fillStyle = "#111820"; c.fillRect(-24, -84, 48, 10);
         c.strokeRect(-24, -84, 48, 10);
-        c.fillStyle = "rgba(143,184,200,0.85)"; c.font = "bold 7px 'Source Code Pro', monospace";
+        c.fillStyle = onCall ? "#3DDC97" : "rgba(143,184,200,0.85)";
+        c.font = "bold 7px 'Source Code Pro', monospace";
         c.textAlign = "center"; c.textBaseline = "middle"; c.fillText("COMM", 0, -78.5);
-        c.fillStyle = "#0c141b"; c.fillRect(-16, -72, 32, 60);
-        c.fillStyle = "rgba(143,184,200,0.08)"; c.beginPath(); c.moveTo(-16, -72); c.lineTo(-4, -72); c.lineTo(-16, -50); c.closePath(); c.fill();
-        c.strokeStyle = "rgba(143,184,200,0.35)"; c.lineWidth = 1; c.strokeRect(-16.5, -72.5, 33, 61);
-        c.fillStyle = "#18222c"; c.fillRect(-9, -60, 18, 26);
-        c.strokeStyle = col; c.strokeRect(-8.5, -59.5, 17, 25);
-        c.fillStyle = onCall ? "#DDF3FF" : "rgba(143,184,200,0.45)"; c.fillRect(-6, -56, 12, 6);
-        c.fillStyle = "#0b1016";
-        if (onCall) {                                           // lifted, the cord drawn out with it
-            c.beginPath(); c.moveTo(9, -50); c.quadraticCurveTo(15, -40, 10, -30); c.stroke();
-            c.save(); c.translate(10, -30); c.rotate(-0.5);
-            c.fillRect(-2, -16, 4, 17); c.strokeRect(-1.5, -15.5, 3, 16); c.restore();
-        } else {                                                // on its hook
-            c.fillRect(9, -58, 4, 17); c.strokeRect(9.5, -57.5, 3, 16);
-            c.beginPath(); c.moveTo(11, -41); c.quadraticCurveTo(16, -30, 6, -34); c.stroke();
+        c.fillStyle = "#0c141b"; c.fillRect(-16, -72, 32, 68);
+        c.fillStyle = "rgba(143,184,200,0.08)";
+        c.beginPath(); c.moveTo(-16, -72); c.lineTo(-4, -72); c.lineTo(-16, -50); c.closePath(); c.fill();
+        c.strokeStyle = "rgba(143,184,200,0.35)"; c.lineWidth = 1; c.strokeRect(-16.5, -72.5, 33, 69);
+        // Gold-bezeled wall phone housing
+        c.fillStyle = "#121a22"; c.fillRect(-10, -62, 20, 30);
+        c.strokeStyle = "#FFB300"; c.lineWidth = 1; c.strokeRect(-9.5, -61.5, 19, 29);
+        c.fillStyle = "#080c10"; c.fillRect(-8, -60, 16, 26);
+        // Mini CRT status screen (upper right)
+        c.fillStyle = "#04080a"; c.fillRect(-1, -58, 8, 7);
+        c.strokeStyle = "rgba(143,184,200,0.45)"; c.strokeRect(-0.5, -57.5, 7, 6);
+        c.fillStyle = onCall ? "rgba(61,220,151,0.85)" : "rgba(0,229,255,0.55)";
+        c.fillRect(0, -57, 6, 5);
+        // Bit-card slot
+        c.fillStyle = "#020406"; c.fillRect(-1, -49, 8, 2);
+        c.fillStyle = "#3DDC97"; c.fillRect(0, -48.5, 4, 1);
+        // 3x4 backlit cyan keypad matrix
+        c.fillStyle = "rgba(0,229,255,0.65)";
+        for (kr = 0; kr < 4; kr++) {
+            for (kc2 = 0; kc2 < 3; kc2++) c.fillRect(-0.5 + kc2 * 2.5, -45 + kr * 2.5, 1.8, 1.8);
+        }
+        // Status LED
+        var ledOn = onCall || Math.sin(clock * 3.2) > -0.2;
+        c.fillStyle = ledOn ? "#39FF14" : "#123818";
+        c.fillRect(5, -60, 2, 2);
+        // Handset cradle and contoured receiver with coiled cord
+        c.fillStyle = "#18222c"; c.fillRect(-7.5, -58, 5, 20);
+        c.strokeStyle = "rgba(143,184,200,0.65)"; c.lineWidth = 1;
+        if (onCall) {
+            c.beginPath(); c.moveTo(-5, -38); c.quadraticCurveTo(-13, -30, -10, -24); c.stroke();
+            c.save(); c.translate(-10, -24); c.rotate(0.45);
+            c.fillStyle = "#202A34";
+            c.fillRect(-2.5, 0, 5, 4); c.fillRect(-1.5, 4, 3, 9); c.fillRect(-2.5, 13, 5, 4);
+            c.strokeRect(-2, 0.5, 4, 16);
+            c.restore();
+        } else {
+            c.fillStyle = "#202A34";
+            c.fillRect(-7.5, -58, 5, 4.5);
+            c.fillRect(-6.5, -53.5, 3, 9);
+            c.fillRect(-7.5, -44.5, 5, 4.5);
+            c.strokeRect(-7, -57.5, 4, 17);
+            c.strokeStyle = "#1c2632"; c.lineWidth = 1.2;
+            c.beginPath(); c.moveTo(-5, -40);
+            for (cl = 0; cl < 4; cl++) c.quadraticCurveTo(-8, -38.5 + cl * 2, -5, -37 + cl * 2);
+            c.lineTo(-2, -35);
+            c.stroke();
         }
     };
 
@@ -1474,7 +1564,10 @@
     function drawProps(t) {
         S.props.forEach(function (p) {
             var left = p.shakeUntil - t, sway = left > 0 ? Math.sin(left * 38) * 3 * Math.min(1, left / 0.4) : 0;
+            var hw = ((p.kind === "bin" && p.dbl) ? 22 : PROP_BOX[p.kind][0]) * K;
             ctx.save();
+            ctx.fillStyle = "rgba(0,0,0,0.28)";
+            ctx.fillRect(p.x - hw * 1.15, S.gy - 0.5, hw * 2.3, 2.5);
             ctx.translate(p.x + (p.kind === "bin" ? sway * 0.6 * K : 0), S.gy);
             ctx.scale(K, K);
             STREET_DRAW[p.kind](ctx, p.idx, p.kind === "tree" ? sway : 0, p.dbl);
@@ -1676,16 +1769,43 @@
         line(ctx, ex + Math.cos(a1) * rLens, ey + Math.sin(a1) * rLens, ex + Math.cos(a1) * R, ey + Math.sin(a1) * R);
         ctx.restore();
     }
+    // Shared drone ride-physics helpers (physics_entities.js / city_street_life.js):
+    // drones rock down on landing (bounceY, sway) and carry a rider smoothly across the street.
+    function tickDroneRide(d, oldX, dt, isRidden, onLand) {
+        if (!d) return;
+        var dx = d.x - oldX;
+        d.dx = Math.abs(dx) > 80 * K ? 0 : dx;
+        var prevOff = d.offTime === undefined ? 1 : d.offTime;
+        var landed = isRidden && !d.riderWas && prevOff >= 0.16;
+        d.offTime = isRidden ? 0 : prevOff + dt;
+        d.riderWas = isRidden;
+        if (landed) {
+            d.bounceY = 4.5 * K;
+            d.sway = 0.08 * (op.vx > 0 ? 1 : (op.vx < 0 ? -1 : op.dir || 1));
+            if (onLand) onLand();
+        }
+        var damp = Math.pow(0.88, dt * 60);
+        if (d.bounceY) { d.bounceY *= damp; if (Math.abs(d.bounceY) < 0.05) d.bounceY = 0; }
+        if (d.sway) { d.sway *= damp; if (Math.abs(d.sway) < 0.002) d.sway = 0; }
+    }
+    function patrolDrawY(t) {
+        if (!patrol) return 0;
+        return patrol.y + patrolScanProgress(t).dip * PATROL.stopDip * K + (patrol.bounceY || 0);
+    }
+    function patrolRot(t) {
+        if (!patrol) return 0;
+        return (patrol.paint && !REDUCE ? Math.sin(t * 2.8) * 0.14 : 0) + (patrol.sway || 0);
+    }
     function drawPatrol(t) {
         if (!patrol) return null;
         var c = ctx, col = PATROL.col, type = patrol.type || "patrol";
         var pulse = 0.5 + Math.sin(t * 3) * 0.5, eye = 0.6 + 0.4 * Math.sin(t * 3);
         var emitY = type === "tracker" ? 16 : (type === "response" ? 11 : 14);
         var stop = patrolScanProgress(t), scanPr = patrol.paint ? 0 : stop.scan;
-        var drawY = patrol.y + stop.dip * PATROL.stopDip * K;
+        var drawY = patrolDrawY(t), rot = patrolRot(t);
         c.save();
         c.translate(patrol.x, drawY);
-        if (patrol.paint) c.rotate(Math.sin(t * 2.8) * 0.14);
+        if (rot) c.rotate(rot);
         c.scale(patrol.dir * PATROL.scale * K, PATROL.scale * K);
         if (!patrol.paint && scanPr <= 0) {
             var g = c.createLinearGradient(0, emitY - 6, 0, 112);
@@ -1771,7 +1891,7 @@
             var dir = Math.random() < 0.5 ? 1 : -1;
             var type = heat >= 80 ? "patrol" : (heat >= 45 ? "response" : (patrolCount % 2 === 0 ? "patrol" : "tracker"));
             patrolCount++;
-            patrol = { x: dir > 0 ? -70 * K : W + 70 * K, y: S.patrolY, dir: dir, type: type, stopAt: -1, nextStop: t + 2 };
+            patrol = { x: dir > 0 ? -70 * K : W + 70 * K, y: S.patrolY, dir: dir, type: type, stopAt: -1, nextStop: t + 2, bounceY: 0, sway: 0, riderWas: false, offTime: 1, dx: 0 };
         }
         if (patrol.stopAt >= 0) {
             if (patrol.paint || t - patrol.stopAt >= PATROL.stopDown + PATROL.stopScan + PATROL.stopUp) {
@@ -1925,11 +2045,19 @@
         if (!scrubber || scrubber.state !== "cleaning" || !scrubber.job || scrubber.job.tag !== g) return 1;
         return Math.max(0.05, 1 - scrubber.prog / SCRUB.cleanTime);
     }
+    function scrubDrawY(t) {
+        if (!scrubber) return 0;
+        var bob = REDUCE ? 0 : Math.sin(t * 2.4 + scrubber.x * 0.01) * 1.5 * K;
+        return scrubber.y + bob + (scrubber.bounceY || 0);
+    }
+    function scrubRot(t) {
+        if (!scrubber) return 0;
+        return (t < scrubber.blindUntil && !REDUCE ? Math.sin(t * 2.8) * 0.14 : 0) + (scrubber.sway || 0);
+    }
     function drawScrubber(t) {
         if (!scrubber) return;
         var c = ctx, s = scrubber, sk = SCRUB.scale * K;
-        var bob = REDUCE ? 0 : Math.sin(t * 2.4 + s.x * 0.01) * 1.5 * K;
-        var sx = s.x, sy = s.y + bob, edge = SCRUB.col, k, a, ma;
+        var sx = s.x, sy = scrubDrawY(t), rot = scrubRot(t), edge = SCRUB.col, k, a, ma;
         c.save();
         c.lineJoin = "miter"; c.shadowBlur = 0;
         if (s.pad > 0) {
@@ -1962,7 +2090,7 @@
             }
         }
         c.translate(sx, sy);
-        if (t < s.blindUntil && !REDUCE) c.rotate(Math.sin(t * 2.8) * 0.14);
+        if (rot) c.rotate(rot);
         c.scale(s.dir * sk, sk);
         c.fillStyle = SCRUB.body; c.strokeStyle = edge; c.lineWidth = 1.2;
         owPod(c, -22, -11, 12, 8); c.fillStyle = SCRUB.body;
@@ -2099,6 +2227,11 @@
             g.addColorStop(1, "rgba(0,223,255,0)");
             ctx.fillStyle = g;
             ctx.beginPath(); ctx.moveTo(22, -ph); ctx.lineTo(132, 0); ctx.lineTo(-88, 0); ctx.closePath(); ctx.fill();
+            var pg = ctx.createRadialGradient(22, 1, 4, 22, 1, 90);
+            pg.addColorStop(0, "rgba(0,223,255,0.12)");
+            pg.addColorStop(1, "rgba(0,223,255,0)");
+            ctx.fillStyle = pg;
+            ctx.beginPath(); ctx.ellipse(22, 1, 90, 4, 0, 0, Math.PI * 2); ctx.fill();
         }
         ctx.restore();
     }
@@ -2389,6 +2522,17 @@
             });
             ctx.restore();
             if (p < 1) {
+                var tMs = t * 1000, m, ang, rr, pAlpha, sz;
+                ctx.fillStyle = g.col;
+                for (m = 0; m < 14; m++) {
+                    ang = ((tMs * 0.015 + m * 47) % 628) / 100;
+                    rr = (3 + ((tMs * 0.06 + m * 17) % 15)) * K;
+                    pAlpha = 0.15 + 0.35 * Math.sin(m + tMs * 0.01);
+                    ctx.globalAlpha = Math.max(0.08, pAlpha);
+                    sz = (m % 3 === 0 ? 2.2 : 1.5) * K;
+                    ctx.fillRect(Math.cos(ang) * rr, Math.sin(ang) * rr, sz, sz);
+                }
+                ctx.globalAlpha = 1;
                 ctx.strokeStyle = g.seen ? "#FF2020" : g.col; ctx.lineWidth = 1.5;
                 ctx.beginPath(); ctx.arc(0, 0, s * 1.45, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * p); ctx.stroke();
             }
@@ -2396,26 +2540,69 @@
         });
     }
 
-    function getPropPlatform(x) {
-        if (!S || !S.props) return 0;
-        for (var i = 0; i < S.props.length; i++) {
-            var p = S.props[i];
-            if (p.kind === "cabinet" || p.kind === "booth" || p.kind === "vending") {
-                var box = PROP_BOX[p.kind];
-                var hw = (box[0] + 4) * K;
-                if (Math.abs(x - p.x) <= hw) {
-                    return box[1] * K;
+    // Static street platforms (cabinets, booths, vending machines, bins) + rideable flying drones.
+    function listPlatforms(t) {
+        var out = [], gy = S.gy, i, p, box, hw, ps, ptype, sk, dhw, topLocal;
+        if (S && S.props) {
+            for (i = 0; i < S.props.length; i++) {
+                p = S.props[i];
+                if (p.kind === "cabinet" || p.kind === "booth" || p.kind === "vending") {
+                    box = PROP_BOX[p.kind];
+                    hw = (box[0] + 4) * K;
+                    out.push({ id: "prop:" + i, kind: p.kind, x0: p.x - hw, x1: p.x + hw, cx: p.x, topY: gy - box[1] * K, rot: 0, dx: 0, ref: p });
+                } else if (p.kind === "bin") {
+                    hw = (p.dbl ? 21.5 : 13.5) * K;
+                    out.push({ id: "prop:bin:" + i, kind: "bin", x0: p.x - hw, x1: p.x + hw, cx: p.x, topY: gy - (p.dbl ? 37 : 36) * K, rot: 0, dx: 0, ref: p });
                 }
             }
         }
-        return 0;
+        if (scrubber) {
+            sk = SCRUB.scale * K; dhw = 22 * sk;
+            out.push({ id: "drone:scrubber", kind: "scrubber", x0: scrubber.x - dhw, x1: scrubber.x + dhw, cx: scrubber.x, topY: scrubDrawY(t) - 15 * sk, rot: scrubRot(t), dx: scrubber.dx || 0, ref: scrubber });
+        }
+        if (binDrone) {
+            sk = BIN_DRONE.scale * K; dhw = 22 * sk;
+            out.push({ id: "drone:bin", kind: "binDrone", x0: binDrone.x - dhw, x1: binDrone.x + dhw, cx: binDrone.x, topY: binDrawY(t) - 15 * sk, rot: binRot(t), dx: binDrone.dx || 0, ref: binDrone });
+        }
+        if (patrol) {
+            ps = PATROL.scale * K; ptype = patrol.type || "patrol";
+            dhw = (ptype === "patrol" ? 25 : (ptype === "response" ? 18 : 12)) * ps;
+            topLocal = ptype === "patrol" ? -8 : (ptype === "tracker" ? -10 : -9);
+            out.push({ id: "drone:patrol", kind: "patrol", x0: patrol.x - dhw, x1: patrol.x + dhw, cx: patrol.x, topY: patrolDrawY(t) + topLocal * ps, rot: patrolRot(t), dx: patrol.dx || 0, ref: patrol });
+        }
+        return out;
+    }
+    function surfaceHeightAt(plat, x) {
+        var surfY = plat.topY + (plat.rot ? (x - plat.cx) * Math.sin(plat.rot) : 0);
+        return Math.max(0, S.gy - surfY);
+    }
+    function findPlatformById(plats, id) {
+        if (!id) return null;
+        for (var i = 0; i < plats.length; i++) if (plats[i].id === id) return plats[i];
+        return null;
+    }
+    function findSupportingPlatform(plats, x, minH, maxH, dropId, t) {
+        var best = null, bestH = -1, i, pl, h;
+        for (i = 0; i < plats.length; i++) {
+            pl = plats[i];
+            if (pl.id === dropId && t < op.dropUntil) continue;
+            if (x < pl.x0 || x > pl.x1) continue;
+            h = surfaceHeightAt(pl, x);
+            if (h >= minH && h <= maxH && h > bestH) { bestH = h; best = pl; }
+        }
+        return best;
+    }
+    function opCenterY() {
+        return op.sitting ? S.gy - 22 * K : S.gy - OP.h * K / 2 - op.jumpY;
     }
 
-    function drawOperator() {
+    function drawOperator(t) {
         var gy = S.gy, w = OP.w * K, h = OP.h * K, col = OP_COLOURS[op.colour];
-        var platH = getPropPlatform(op.x);
-        var shadowFloor = (platH > 0 && op.jumpY >= platH - 4 * K) ? gy - platH : gy;
-        var shadowDist = (platH > 0 && op.jumpY >= platH - 4 * K) ? (op.jumpY - platH) : op.jumpY;
+        var plats = listPlatforms(t);
+        var sup = op.plat ? findPlatformById(plats, op.plat.id) : findSupportingPlatform(plats, op.x, -4 * K, op.jumpY + 4 * K, op.dropId, t);
+        var floorH = sup ? surfaceHeightAt(sup, op.x) : 0;
+        var shadowFloor = gy - floorH;
+        var shadowDist = Math.max(0, op.jumpY - floorH);
 
         ctx.save();
         if (op.sitting) {
@@ -2456,7 +2643,7 @@
         ctx.restore();
     }
 
-    // The companion drone (drone_cosmetics.js): a round core with a green eye, lift pods, blinking, thruster flame, and barrel rolls.
+    // The companion drone: a round core with a green eye, twin lift-pod jets, blinking, and barrel rolls.
     function drawDrone() {
         var c = ctx, x = drone.x, y = drone.y, col = "#19d3ff";
         c.save();
@@ -2464,8 +2651,8 @@
         if (drone.barrelRollTimer > 0) {
             var prog = (60 - drone.barrelRollTimer) / 60;
             var circleAngle = prog * Math.PI * 2;
-            rollOffX = Math.sin(circleAngle) * 16 * K;
-            rollOffY = (-Math.cos(circleAngle) * 16 + 16) * K;
+            rollOffX = Math.sin(circleAngle) * 8.5 * K;
+            rollOffY = (-Math.cos(circleAngle) * 8.5 + 8.5) * K;
             rollAngle = circleAngle;
         }
         c.translate(x + rollOffX, y + rollOffY);
@@ -2477,14 +2664,31 @@
         line(c, -13 * K, 0, -7 * K, 0);
         line(c, 7 * K, 0, 13 * K, 0);
 
-        // Lift pods on wings
-        c.fillStyle = "#18122B"; c.lineWidth = Math.max(1, K);
+        // Lift pods on wings + twin cyan/ice-blue hover micro-jets underneath
+        c.lineWidth = Math.max(1, K);
         [-1, 1].forEach(function (dir) {
             var px = dir * 12 * K;
+            var jetH = (2.7 + Math.sin(clock * 22 + dir * 0.9) * 0.9) * K;
+            c.fillStyle = "rgba(25,211,255,0.58)";
+            c.beginPath();
+            c.moveTo(px - 1.35 * K, 4.3 * K);
+            c.lineTo(px, 4.3 * K + jetH);
+            c.lineTo(px + 1.35 * K, 4.3 * K);
+            c.closePath();
+            c.fill();
+            c.fillStyle = "rgba(218,248,255,0.88)";
+            c.beginPath();
+            c.moveTo(px - 0.55 * K, 4.3 * K);
+            c.lineTo(px, 4.3 * K + jetH * 0.58);
+            c.lineTo(px + 0.55 * K, 4.3 * K);
+            c.closePath();
+            c.fill();
+
+            c.strokeStyle = col;
+            c.fillStyle = "#18122B";
             pPath(c, [px - 3 * K, -3 * K, px + 3 * K, -3 * K, px + 3 * K, 1.5 * K, px + 1.5 * K, 3 * K, px - 1.5 * K, 3 * K, px - 3 * K, 1.5 * K], true);
             c.fill(); c.stroke();
             c.fillStyle = col; c.fillRect(px - 1.5 * K, 3.4 * K, 3 * K, 0.9 * K);
-            c.fillStyle = "#18122B";
         });
 
         // Round central core body
@@ -2502,15 +2706,6 @@
             c.beginPath(); c.arc(0, 0, 2.5 * K, 0, Math.PI * 2); c.fill();
         }
 
-        // Thruster flame flicker underneath (drone_city.js:320)
-        var flameH = (3 + Math.sin(clock * 24) * 2) * K;
-        c.strokeStyle = "#FFB300"; c.lineWidth = 1 * K;
-        c.beginPath();
-        c.moveTo(-1.5 * K, 6.5 * K);
-        c.lineTo(0, 6.5 * K + flameH);
-        c.lineTo(1.5 * K, 6.5 * K);
-        c.stroke();
-
         c.restore();
     }
 
@@ -2520,13 +2715,13 @@
             return { x: l.x + 26 * K, y: S.gy - LAMP.poleH * K, label: l.broken ? "STREETLIGHT // FAULT" : "STREETLIGHT // OK" };
         });
         if (S.cam) out.push({ x: S.cam.x, y: S.cam.y + 6 * K, label: camIsDown(t) ? "CAMERA // DISABLED" : (camPaint ? "CAMERA // BLINDED" : "CAMERA // LIVE"), red: true });
-        if (scrubber) out.push({ x: scrubber.x, y: scrubber.y, label: t < scrubber.blindUntil ? "SCRUBBER // BLINDED" : "CIVIC // SCRUBBER" });
-        if (binDrone) out.push({ x: binDrone.x, y: binDrone.y, label: binDrone.paint ? "BIN DRONE // BLINDED" : "CIVIC // BIN ROUND" });
+        if (scrubber) out.push({ x: scrubber.x, y: scrubDrawY(t), label: t < scrubber.blindUntil ? "SCRUBBER // BLINDED" : "CIVIC // SCRUBBER" });
+        if (binDrone) out.push({ x: binDrone.x, y: binDrawY(t), label: binDrone.paint ? "BIN DRONE // BLINDED" : "CIVIC // BIN ROUND" });
         if (patrol) {
             var pName = patrol.type === "response" ? "OW // INTERCEPTOR" : (patrol.type === "tracker" ? "OW // TRACKER" : "OW // PATROL");
-            out.push({ x: patrol.x, y: patrol.y, label: patrol.paint ? pName + " // BLINDED" : pName, red: true });
+            out.push({ x: patrol.x, y: patrolDrawY(t), label: patrol.paint ? pName + " // BLINDED" : pName, red: true });
         }
-        if (nonHuman) out.push({ x: op.x, y: S.gy - (OP.h + 8) * K, label: "VISITOR // NON-HUMAN" });
+        if (nonHuman) out.push({ x: op.x, y: opCenterY() - OP.h * K * 0.7, label: "VISITOR // NON-HUMAN" });
         return out;
     }
 
@@ -2574,7 +2769,8 @@
                 q: bins, i: 0, dir: dir,
                 x: dir > 0 ? -70 * K : W + 70 * K,
                 y: S.gy - (BIN_DRONE.cruise + 80) * K,
-                ph: "in", t: 0, hose: 0, paint: null, blindUntil: 0
+                ph: "in", t: 0, hose: 0, paint: null, blindUntil: 0,
+                bounceY: 0, sway: 0, riderWas: false, offTime: 1, dx: 0
             };
         }
         var d = binDrone, B = BIN_DRONE;
@@ -2619,11 +2815,19 @@
             }
         }
     }
+    function binDrawY(t) {
+        if (!binDrone) return 0;
+        var bob = REDUCE ? 0 : Math.sin(t * 2.4 + binDrone.x * 0.01) * 1.5 * K;
+        return binDrone.y + bob + (binDrone.bounceY || 0);
+    }
+    function binRot(t) {
+        if (!binDrone) return 0;
+        return (binDrone.paint && !REDUCE ? Math.sin(t * 2.8) * 0.14 : 0) + (binDrone.sway || 0);
+    }
     function drawBinDrone(t) {
         if (!binDrone) return;
         var c = ctx, d = binDrone, B = BIN_DRONE, sk = B.scale * K;
-        var bob = REDUCE ? 0 : Math.sin(t * 2.4 + d.x * 0.01) * 1.5 * K;
-        var sx = d.x, sy = d.y + bob, edge = B.col, r, m, u;
+        var sx = d.x, sy = binDrawY(t), rot = binRot(t), edge = B.col, r, m, u;
         c.save();
         c.lineJoin = "miter"; c.shadowBlur = 0;
         if (d.hose > 0) {
@@ -2641,7 +2845,7 @@
             }
         }
         c.translate(sx, sy);
-        if (d.paint && !REDUCE) c.rotate(Math.sin(t * 2.8) * 0.14);
+        if (rot) c.rotate(rot);
         c.scale(d.dir * sk, sk);
         c.fillStyle = B.body; c.strokeStyle = edge; c.lineWidth = 1.2;
         owPod(c, -22, -11, 12, 8); c.fillStyle = B.body;
@@ -2678,31 +2882,57 @@
     }
 
     // ─── Passers-by with umbrellas (city_street_life.js) ───────────────────
+    function walkerTarget() {
+        return REDUCE ? 1 : clamp(Math.floor(W / 680), 1, WALKER_MAX);
+    }
     function streetDoors() {
         return S.near.map(function (b) { return b.x + b.w / 2; }).filter(function (dx) { return dx > 12 && dx < W - 12; });
+    }
+    function pickDoorAwayFrom(doors, x) {
+        var far = doors.filter(function (dx) { return Math.abs(dx - x) > 90 * K; });
+        return far.length ? far[Math.floor(Math.random() * far.length)] : null;
     }
     function newWalker(startX) {
         var doors = streetDoors();
         var ci = Math.floor(Math.random() * WALKER_COLS.length);
         var ui = (ci + 1 + Math.floor(Math.random() * (WALKER_COLS.length - 1))) % WALKER_COLS.length;
         var bw = 18 + Math.random() * 5, bh = 37 + Math.random() * 6;
-        var x = startX !== undefined ? startX : (doors.length ? doors[Math.floor(Math.random() * doors.length)] : Math.random() * W);
-        var dest = null, dir = Math.random() < 0.5 ? 1 : -1;
-        var far = doors.filter(function (dx) { return Math.abs(dx - x) > 120 * K; });
-        if (far.length) { dest = far[Math.floor(Math.random() * far.length)]; dir = dest > x ? 1 : -1; }
+        var x, dest = null, dir = Math.random() < 0.5 ? 1 : -1, st = "walk", a = 1, roll;
+        if (startX !== undefined) {
+            x = startX;
+            if (doors.length && Math.random() < 0.45) dest = pickDoorAwayFrom(doors, x);
+            if (dest !== null) dir = dest > x ? 1 : -1;
+        } else {
+            roll = Math.random();
+            if (roll < 0.52 || !doors.length) {
+                // Walk straight past the street from one off-screen side to the other.
+                x = dir > 0 ? -24 * K : W + 24 * K;
+            } else if (roll < 0.8) {
+                // Arrive from off-screen and duck into a building doorway (including Pixel Arcade).
+                x = dir > 0 ? -24 * K : W + 24 * K;
+                dest = pickDoorAwayFrom(doors, x) || doors[Math.floor(Math.random() * doors.length)];
+                if (dest !== null) dir = dest > x ? 1 : -1;
+            } else {
+                // Step out of a doorway heading either to another door or off-screen.
+                x = doors[Math.floor(Math.random() * doors.length)];
+                dest = pickDoorAwayFrom(doors, x);
+                if (dest !== null) dir = dest > x ? 1 : -1;
+                st = "out"; a = 0;
+            }
+        }
         return {
             x: x, dest: dest, dir: dir, w: bw, h: bh,
             col: WALKER_COLS[ci], ucol: WALKER_COLS[ui],
-            sp: 42 + Math.random() * 34, st: startX !== undefined ? "walk" : "out",
-            a: startX !== undefined ? 1 : 0, ph: Math.random() * 6.28, lic: Math.random() < 0.12, hide: false
+            sp: 42 + Math.random() * 34, st: st,
+            a: a, ph: Math.random() * 6.28, lic: Math.random() < 0.12, hide: false
         };
     }
     function seedWalkers(count) {
-        var n = count || clamp(Math.round(W / 380), 2, WALKER_MAX);
+        var n = count || walkerTarget();
         for (var i = 0; i < n; i++) walkers.push(newWalker(40 + Math.random() * Math.max(40, W - 80)));
     }
     function updateWalkers(t, dt) {
-        var doors = streetDoors(), target = clamp(Math.round(W / 380), 2, WALKER_MAX), i, w, best, d;
+        var doors = streetDoors(), target = walkerTarget(), i, w, best;
         if (!walkersHidden && heat >= WALKER_HIDE_HEAT) {
             walkersHidden = true;
             walkers.forEach(function (wk) {
@@ -2710,20 +2940,20 @@
                 best = null;
                 doors.forEach(function (dx) { if (best === null || Math.abs(dx - wk.x) < Math.abs(best - wk.x)) best = dx; });
                 if (best !== null) { wk.dest = best; wk.dir = best > wk.x ? 1 : -1; wk.hide = true; }
+                else { wk.dest = null; wk.dir = wk.x < W / 2 ? -1 : 1; wk.hide = true; }
             });
         } else if (walkersHidden && heat < WALKER_BACK_HEAT) {
             walkersHidden = false;
             walkers.forEach(function (wk) {
                 if (wk.st === "hid") {
-                    var far = doors.filter(function (dx) { return Math.abs(dx - wk.x) > 120 * K; });
-                    wk.dest = far.length ? far[Math.floor(Math.random() * far.length)] : null;
+                    wk.dest = doors.length ? pickDoorAwayFrom(doors, wk.x) : null;
                     wk.dir = wk.dest !== null ? (wk.dest > wk.x ? 1 : -1) : (Math.random() < 0.5 ? 1 : -1);
                     wk.st = "out"; wk.a = 0; wk.hide = false;
                 }
             });
         }
         var live = walkers.filter(function (wk) { return wk.st !== "hid"; }).length;
-        if (!walkersHidden && live < target && Math.random() < 0.65 * dt && doors.length) {
+        if (!walkersHidden && live < target && Math.random() < 0.35 * dt) {
             walkers.push(newWalker());
         }
         for (i = walkers.length - 1; i >= 0; i--) {
@@ -2741,7 +2971,7 @@
             if (w.dest !== null && (w.dir > 0 ? w.x >= w.dest : w.x <= w.dest)) {
                 w.x = w.dest;
                 w.st = "in";
-            } else if (w.dest === null && (w.x < -30 * K || w.x > W + 30 * K)) {
+            } else if (w.dest === null && (w.x < -36 * K || w.x > W + 36 * K)) {
                 walkers.splice(i, 1);
             }
         }
@@ -2857,71 +3087,155 @@
     }
 
     function update(t, dt) {
+        var oldPx = patrol ? patrol.x : 0, oldSx = scrubber ? scrubber.x : 0, oldBx = binDrone ? binDrone.x : 0;
+        updateCars(dt);
+        updatePatrol(t, dt);
+        updateScrubber(t, dt);
+        updateBinDrone(t, dt);
+        updateWalkers(t, dt);
+        updateSteam(t, dt);
+
+        if (!streetHasKeys()) clearKeys();
+
         if (op.sitting) {
+            op.vx = 0;
             op.vy = 0;
             op.jumpY = 0;
+            op.plat = null;
+            op.coyote = 0;
+            op.jumpBuf = 0;
             op.wanderAt = t + 5;
+            if (patrol) tickDroneRide(patrol, oldPx, dt, false);
+            if (scrubber) tickDroneRide(scrubber, oldSx, dt, false);
+            if (binDrone) tickDroneRide(binDrone, oldBx, dt, false);
             // Companion drone gently hovers near seated operator
             var stx = op.x - op.dir * 20 * K, sty = S.gy - (OP.h + 10) * K + Math.sin(t * 2.2) * 3 * K;
             var sf = Math.min(1, dt * 5);
             drone.x += (stx - drone.x) * sf;
             drone.y += (sty - drone.y) * sf;
-            updateCars(dt);
-            updatePatrol(t, dt);
-            updateScrubber(t, dt);
-            updateBinDrone(t, dt);
-            updateWalkers(t, dt);
-            updateSteam(t, dt);
             return;
         }
 
-        // Keyboard movement overrides autonomous wandering while keys are pressed
+        // Compute per-tick horizontal carry on drones before integrating operator motion
+        var plats = listPlatforms(t);
+        var ridePlat = op.plat ? findPlatformById(plats, op.plat.id) : null;
+        if (patrol) patrol.dx = Math.abs(patrol.x - oldPx) > 80 * K ? 0 : (patrol.x - oldPx);
+        if (scrubber) scrubber.dx = Math.abs(scrubber.x - oldSx) > 80 * K ? 0 : (scrubber.x - oldSx);
+        if (binDrone) binDrone.dx = Math.abs(binDrone.x - oldBx) > 80 * K ? 0 : (binDrone.x - oldBx);
+        if (ridePlat && op.vy === 0 && ridePlat.ref && ridePlat.ref.dx) {
+            op.x = clamp(op.x + ridePlat.ref.dx, 20, W - 20);
+        }
+
+        // Horizontal movement with ground/air easing matching the game feel (physics_player.js)
+        var groundedNow = (op.vy === 0 && (op.jumpY <= 0.5 || !!ridePlat));
         if (keys.left || keys.right) {
             var moveDir = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
-            if (moveDir !== 0) {
-                op.dir = moveDir;
-                op.x = clamp(op.x + moveDir * OP.speed * K * dt * 1.35, 20, W - 20);
-                op.target = op.x;
-                op.wanderAt = t + 2 + Math.random() * 2;
-            }
+            if (moveDir !== 0) op.dir = moveDir;
+            var targetVx = moveDir * OP.speed * 1.35 * K;
+            var rate = groundedNow ? 18 : 10;
+            op.vx += (targetVx - op.vx) * (1 - Math.exp(-rate * dt));
+            op.x = clamp(op.x + op.vx * dt, 20, W - 20);
+            op.target = op.x;
+            op.wanderAt = t + 5 + Math.random() * 3;
+        } else if (Math.abs(op.vx) > 2 * K) {
+            op.vx *= Math.exp(-(groundedNow ? 18 : 8) * dt);
+            if (Math.abs(op.vx) <= 2 * K) op.vx = 0;
+            op.x = clamp(op.x + op.vx * dt, 20, W - 20);
+            op.target = op.x;
         } else {
-            // Autonomous wandering along the street when player is not controlling
-            if (t > op.wanderAt) {
-                if (Math.random() < 0.35) {
-                    op.wanderAt = t + 2 + Math.random() * 3;
-                } else {
-                    op.target = 40 + Math.random() * (W - 80);
-                    op.wanderAt = t + 4 + Math.random() * 6;
+            op.vx = 0;
+            // Autonomous wandering only at ground level, so perched/riding operators stay put
+            if (!ridePlat && op.jumpY === 0) {
+                if (t > op.wanderAt) {
+                    if (Math.random() < 0.35) {
+                        op.wanderAt = t + 2 + Math.random() * 3;
+                    } else {
+                        op.target = 40 + Math.random() * (W - 80);
+                        op.wanderAt = t + 4 + Math.random() * 6;
+                    }
+                }
+                var dx = op.target - op.x;
+                if (Math.abs(dx) > 4) {
+                    op.dir = dx > 0 ? 1 : -1;
+                    op.x += op.dir * Math.min(Math.abs(dx), OP.speed * 0.55 * K * dt);
                 }
             }
-            var dx = op.target - op.x;
-            if (Math.abs(dx) > 4) {
-                op.dir = dx > 0 ? 1 : -1;
-                op.x += op.dir * Math.min(Math.abs(dx), OP.speed * 0.55 * K * dt);
+        }
+
+        // Track riding platform / step-off / drop-through / coyote time
+        ridePlat = op.plat ? findPlatformById(plats, op.plat.id) : null;
+        var dropBlocked = op.plat && op.dropId === op.plat.id && t < op.dropUntil;
+        if (op.vy === 0 && ridePlat && !dropBlocked && op.x >= ridePlat.x0 && op.x <= ridePlat.x1) {
+            op.jumpY = surfaceHeightAt(ridePlat, op.x);
+            op.coyote = OP.coyote;
+        } else if (op.vy === 0 && op.jumpY > 0) {
+            var adj = findSupportingPlatform(plats, op.x, op.jumpY - 6 * K, op.jumpY + 6 * K, op.dropId, t);
+            if (adj) {
+                op.plat = adj;
+                op.jumpY = surfaceHeightAt(adj, op.x);
+                op.coyote = OP.coyote;
+            } else {
+                op.plat = null;
+                op.coyote = OP.coyote;
+                op.vy = 20 * K;
             }
+        } else if (op.jumpY <= 0 && op.vy === 0) {
+            op.plat = null;
+            op.coyote = OP.coyote;
+        } else {
+            op.coyote = Math.max(0, op.coyote - dt);
         }
 
-        // Platform detection and jump physics
-        var platH = getPropPlatform(op.x);
-        var prevY = op.jumpY;
-
-        // Walking off a prop top causes gravity to take over
-        if (op.vy === 0 && op.jumpY > 0 && platH === 0) {
-            op.vy = 20 * K;
+        if (op.jumpBuf > 0) op.jumpBuf = Math.max(0, op.jumpBuf - dt);
+        var canJump = (op.vy === 0 && (op.jumpY <= 0.5 || !!op.plat)) || op.coyote > 0;
+        if (op.jumpBuf > 0 && canJump) {
+            op.plat = null;
+            op.dropId = null;
+            op.vy = -OP.jumpV * K;
+            op.jumpY += 2 * K;
+            op.coyote = 0;
+            op.jumpBuf = 0;
+            sfx(440, 720, 0.09, "square");
         }
 
+        // Vertical integration and landing across static props and moving drone decks
         if (op.jumpY > 0 || op.vy !== 0) {
+            var prevY = op.jumpY;
             op.jumpY += -op.vy * dt;
-            op.vy += 880 * K * dt;
-
-            // Check landing on platform top vs ground
-            if (platH > 0 && op.vy >= 0 && prevY >= platH - 8 * K && op.jumpY <= platH) {
-                op.jumpY = platH;
-                op.vy = 0;
-            } else if (op.jumpY <= 0) {
-                op.jumpY = 0;
-                op.vy = 0;
+            op.vy += OP.gravity * K * dt;
+            if (op.vy >= 0) {
+                var land = findSupportingPlatform(plats, op.x, op.jumpY - 4 * K, prevY + 8 * K, op.dropId, t);
+                if (land) {
+                    op.plat = land;
+                    op.jumpY = surfaceHeightAt(land, op.x);
+                    op.vy = 0;
+                } else if (op.jumpY <= 0) {
+                    op.jumpY = 0;
+                    op.vy = 0;
+                    op.plat = null;
+                }
             }
+        }
+
+        // Drone rocking & bin lid shake on landing
+        var landedId = (op.vy === 0 && op.plat) ? op.plat.id : null;
+        if (patrol) tickDroneRide(patrol, oldPx, dt, landedId === "drone:patrol");
+        if (scrubber) tickDroneRide(scrubber, oldSx, dt, landedId === "drone:scrubber");
+        if (binDrone) tickDroneRide(binDrone, oldBx, dt, landedId === "drone:bin", function () {
+            for (var bi = 0; bi < 3; bi++) {
+                addBit(op.x + (Math.random() - 0.5) * 14 * K, S.gy - op.jumpY, (Math.random() - 0.5) * 60 * K, -(20 + Math.random() * 40) * K, ["#39FF14", "#00DFFF", "#737b9e"][bi], 2 * K, 0.8);
+            }
+        });
+        for (var pi = 0; pi < S.props.length; pi++) {
+            var bp = S.props[pi];
+            if (bp.kind !== "bin") continue;
+            tickDroneRide(bp, bp.x, dt, landedId === "prop:bin:" + pi, function () {
+                bp.shakeUntil = t + 0.28;
+                for (var bi = 0; bi < 4; bi++) {
+                    addBit(bp.x + (Math.random() - 0.5) * 14 * K, S.gy - 34 * K, (Math.random() - 0.5) * 90 * K, -(40 + Math.random() * 60) * K, ["#39FF14", "#00DFFF", "#737b9e"][bi % 3], 2 * K, 0.9);
+                }
+                sfx(180, 120, 0.06, "triangle");
+            });
         }
 
         // Drone barrel roll timer
@@ -2933,23 +3247,18 @@
             drone.barrelRollTimer = 60;
         }
 
-        var tx = op.x - op.dir * 24 * K, ty = S.gy - (OP.h + 24) * K - op.jumpY * 0.35 + Math.sin(t * 2.2) * 3 * K;
+        var tx = op.x - op.dir * 24 * K, ty = S.gy - (OP.h + 24) * K - op.jumpY * 0.85 + Math.sin(t * 2.2) * 3 * K;
         var f = Math.min(1, dt * 5);
         drone.x += (tx - drone.x) * f;
         drone.y += (ty - drone.y) * f;
-        updateCars(dt);
-        updatePatrol(t, dt);
-        updateScrubber(t, dt);
-        updateBinDrone(t, dt);
-        updateWalkers(t, dt);
-        updateSteam(t, dt);
     }
 
     function updateHeat(t, dt, camInfo) {
         var cone = camInfo && camInfo.cone, pScan = camInfo && camInfo.patrolScan;
         var patrolReach = pScan ? (S.gy - pScan.y) * Math.tan(PATROL.scanHalf) : PATROL.beam * K;
+        var underPatrol = !!patrol && !patrol.paint && !(op.plat && op.plat.id === "drone:patrol") && S.gy - op.jumpY > patrolDrawY(t) && Math.abs(op.x - patrol.x) < patrolReach;
         // seen in the camera's cone, or under the patrol drone's beam (unless its eye has been painted over)
-        seen = (!!cone && op.x > cone.x1 && op.x < cone.x2) || (!!patrol && !patrol.paint && Math.abs(op.x - patrol.x) < patrolReach);
+        seen = (!!cone && op.x > cone.x1 && op.x < cone.x2) || underPatrol;
         tags.forEach(function (g) { if (seen && t - g.t0 < TAG_TIME) g.seen = true; });
         if (seen) { heat += HEAT.rise * dt; lastSeen = t; }
         else if (t - lastSeen > HEAT.grace) heat -= HEAT.fall * dt;
@@ -2984,7 +3293,7 @@
         var patrolScan = drawPatrol(t);
         drawBits(dt);
         drawSteam();
-        drawOperator();
+        drawOperator(t);
         drawDrone();
         if (cone && S.cam && !camIsDown(t) && !camPaint) {
             drawCameraBeamWash(t, cone);
@@ -3120,10 +3429,13 @@
             if (bp.kind === "bench" && Math.abs(op.x - bp.x) <= 36 * K && op.jumpY < 12 * K) {
                 op.sitting = true;
                 op.x = bp.x;
+                op.vx = 0;
                 op.vy = 0;
                 op.jumpY = 0;
-                keys.left = false;
-                keys.right = false;
+                op.plat = null;
+                op.coyote = 0;
+                op.jumpBuf = 0;
+                clearKeys();
                 sfx(480, 320, 0.08, "sine");
                 return;
             }
@@ -3163,11 +3475,11 @@
         return tag === "BUTTON" || tag === "A" || tag === "SUMMARY";
     }
 
-    // Keyboard movement listeners (A/D run, W/Space jump, F spray, E interact/sit)
+    // Keyboard movement listeners (A/D run, W/Space jump, S drop, F/G spray, E interact/sit)
     window.addEventListener("keydown", function (e) {
         if (isTypingInput() || e.ctrlKey || e.metaKey || e.altKey || !streetHasKeys()) return;
         var code = e.code || e.key;
-        if (e.repeat && (code === "KeyE" || code === "KeyF")) return;     // holding E or F acts once
+        if (e.repeat && (code === "KeyE" || code === "KeyF" || code === "KeyG")) return;
         if (code === "Space" && focusOnControl()) return;
         if (code === "KeyA" || code === "ArrowLeft") {
             keys.left = true;
@@ -3179,51 +3491,31 @@
             if (op.sitting) {
                 op.sitting = false;
             } else {
-                var platH = getPropPlatform(op.x);
-                var isGrounded = (op.jumpY === 0 || (platH > 0 && Math.abs(op.jumpY - platH) < 4 * K));
-                if (isGrounded && op.vy === 0) {
-                    op.vy = -390 * K;
-                    op.jumpY += 2 * K;
-                    sfx(440, 720, 0.09, "square");
-                }
+                op.jumpBuf = OP.jumpBuf;
             }
             if (code === "Space" || code === "ArrowUp") e.preventDefault();
-        } else if (code === "KeyF") {
+        } else if (code === "KeyS" || code === "ArrowDown") {
+            if (op.vy === 0 && (op.plat || op.jumpY > 0.5)) {
+                op.dropId = op.plat ? op.plat.id : null;
+                op.dropUntil = clock + 0.24;
+                op.plat = null;
+                op.vy = 40 * K;
+                op.coyote = 0;
+                if (code === "ArrowDown") e.preventDefault();
+            }
+        } else if (code === "KeyF" || code === "KeyG") {
             if (clock < (op.sprayUntil || 0)) return;
             op.sprayUntil = clock + TAG_TIME;
             if (op.sitting) op.sitting = false;
-            var faceDir = op.dir || 1, sxF = op.x + faceDir * 12 * K, syF = S.gy - op.jumpY - OP.h * K * 0.7;
-            var pyF = patrol ? patrol.y + patrolScanProgress(clock).dip * PATROL.stopDip * K : 0;
-            if (patrol && !patrol.paint && Math.abs(sxF - patrol.x) <= 58 * K && Math.abs(syF - pyF) <= 36 * K) {
-                patrol.paint = OP_COLOURS[op.colour];
-                hiss(0.5, "highpass", 3600, 0.1);
-                return;
-            }
-            if (scrubber && clock >= scrubber.blindUntil && Math.abs(sxF - scrubber.x) <= 44 * K && Math.abs(syF - scrubber.y) <= 34 * K) {
-                scrubber.paint = OP_COLOURS[op.colour];
-                scrubber.blindUntil = clock + SCRUB.blindTime;
-                scrubber.state = "patrol"; scrubber.job = null; scrubber.prog = 0;
-                hiss(0.5, "highpass", 3600, 0.1);
-                return;
-            }
-            if (binDrone && !binDrone.paint && Math.abs(sxF - binDrone.x) <= 44 * K && Math.abs(syF - binDrone.y) <= 34 * K) {
-                binDrone.paint = OP_COLOURS[op.colour];
-                hiss(0.5, "highpass", 3600, 0.1);
-                return;
-            }
-            if (S.cam && !camIsDown(clock) && !camPaint && near(sxF, syF, S.cam.x, S.cam.y + 4 * K, 36 * K)) {
-                camPaint = OP_COLOURS[op.colour];
-                hiss(0.5, "highpass", 3600, 0.1);
-                return;
-            }
-            sprayAt(sxF, syF, clock);
+            var faceDir = op.dir || 1, sxF = op.x + faceDir * 12 * K, syF = opCenterY() - OP.h * K * 0.2;
+            if (sprayDroneOrCam(clock, sxF, syF, true)) return;
+            sprayAt(sxF, syF, clock, true);
         } else if (code === "KeyE") {
             handleKeyE(clock);
         }
     });
 
     window.addEventListener("keyup", function (e) {
-        if (isTypingInput()) return;
         var code = e.code || e.key;
         if (code === "KeyA" || code === "ArrowLeft") {
             keys.left = false;
@@ -3231,6 +3523,8 @@
             keys.right = false;
         }
     });
+    window.addEventListener("blur", clearKeys);
+    document.addEventListener("visibilitychange", function () { if (document.hidden) clearKeys(); });
 
     // ─── Things that answer a click ────────────────────────────────────────
     // Nothing marks them (the game's rule for secrets). The operator changes colour, and the page's
@@ -3249,17 +3543,73 @@
 
     function near(x, y, tx, ty, r) { return Math.abs(x - tx) <= r && Math.abs(y - ty) <= r; }
 
-    function sprayAt(x, y, t) {
-        var F = FACADE, hit = null, half = tagHalf() + 4;
+    function paintDroneSplash(x, y, col) {
+        for (var i = 0; i < 6; i++) {
+            var a = Math.random() * Math.PI * 2, sp = (28 + Math.random() * 52) * K;
+            addBit(x, y, Math.cos(a) * sp, Math.sin(a) * sp - 20 * K, col, 2.2 * K, 0.45);
+        }
+        hiss(0.5, "highpass", 3600, 0.1);
+    }
+    function sprayDroneOrCam(t, x, y, byOp) {
+        var col = OP_COLOURS[op.colour], ridingOw = byOp && op.plat && op.plat.id === "drone:patrol";
+        var py = patrol ? patrolDrawY(t) : 0;
+        if (patrol && (ridingOw || (Math.abs(x - patrol.x) <= 58 * K && Math.abs(y - py) <= (byOp ? 42 : 26) * K))) {
+            patrol.paint = col;
+            paintDroneSplash(patrol.x, py, col);
+            heat = clamp(heat + 20, 0, 100);
+            return true;
+        }
+        var sy = scrubber ? scrubDrawY(t) : 0;
+        if (scrubber && Math.abs(x - scrubber.x) <= (byOp ? 44 : 36) * K && Math.abs(y - sy) <= (byOp ? 40 : 24) * K) {
+            scrubber.paint = col;
+            scrubber.blindUntil = t + SCRUB.blindTime;
+            scrubber.state = "patrol"; scrubber.job = null; scrubber.prog = 0;
+            paintDroneSplash(scrubber.x, sy, col);
+            return true;
+        }
+        var bdy = binDrone ? binDrawY(t) : 0;
+        if (binDrone && Math.abs(x - binDrone.x) <= (byOp ? 44 : 36) * K && Math.abs(y - bdy) <= (byOp ? 40 : 24) * K) {
+            binDrone.paint = col;
+            paintDroneSplash(binDrone.x, bdy, col);
+            return true;
+        }
+        if (byOp && S.cam && !camIsDown(t) && near(x, y, S.cam.x, S.cam.y + 4 * K, 36 * K)) {
+            camPaint = col;
+            paintDroneSplash(S.cam.x, S.cam.y + 4 * K, col);
+            if (seen) heat = clamp(heat + HEAT.tag, 0, 100);
+            return true;
+        }
+        return false;
+    }
+    function spawnPuff(x, y, col) {
+        var base = -Math.PI / 2 + (Math.random() - 0.5) * 1.3;
+        for (var i = 0; i < 12; i++) {
+            var a = base + (Math.random() - 0.5) * 0.55, sp = (50 + Math.random() * 85) * K;
+            addBit(x, y, Math.cos(a) * sp, Math.sin(a) * sp, col, (1.8 + Math.random() * 1.4) * K, 0.38, 120 * K);
+        }
+        hiss(0.28, "highpass", 4200, 0.08);
+    }
+
+    function sprayAt(x, y, t, allowPuff) {
+        var hit = null, half = tagHalf() + 4, col = OP_COLOURS[op.colour];
         if (t < (restUntil.spray || 0)) return;
         S.near.forEach(function (b) { if (x > b.x && x < b.x + b.w && y > S.gy - b.h && y < S.gy) hit = b; });
-        if (!hit || hit.w < half * 2 + 8) return;
+        if (!hit || hit.w < half * 2 + 8) {
+            if (allowPuff) { restUntil.spray = t + REST.spray; spawnPuff(x, y, col); }
+            return;
+        }
         var tx = clamp(x, hit.x + half, hit.x + hit.w - half);
         var ty = clamp(y, S.gy - hit.h + half + 4 * K, S.gy - half - 6 * K);
-        // doors refuse it
-        if (Math.abs(tx - (hit.x + hit.w / 2)) < 36 * K + half && ty > S.gy - 90 * K - half) ty = S.gy - F.storeH * K - half - 6 * K;
+        // doors refuse spray (spawn a puff on keyboard spray rather than teleporting tags upstairs)
+        if (Math.abs(tx - (hit.x + hit.w / 2)) < 36 * K + half && ty > S.gy - 90 * K - half) {
+            if (allowPuff) { restUntil.spray = t + REST.spray; spawnPuff(x, y, col); }
+            return;
+        }
+        for (var ti = tags.length - 1; ti >= 0; ti--) {
+            if (!tags[ti].amb && Math.abs(tags[ti].x - tx) <= 22 * K && Math.abs(tags[ti].y - ty) <= 22 * K) tags.splice(ti, 1);
+        }
         var r = rng(Math.floor(x * 31 + y * 17) + tagNext);
-        tags.push({ x: tx, y: ty, style: TAG_ORDER[tagNext++ % TAG_ORDER.length], col: OP_COLOURS[op.colour], rot: (r() - 0.5) * 0.16,
+        tags.push({ x: tx, y: ty, style: TAG_ORDER[tagNext++ % TAG_ORDER.length], col: col, rot: (r() - 0.5) * 0.16,
             t0: t, seen: seen, len: [4 + r() * 9, 4 + r() * 9] });
         if (tags.length > TAG_MAX) tags.shift();
         restUntil.spray = t + REST.spray;
@@ -3318,29 +3668,10 @@
 
     function onClick(e) {
         var r = canvas.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top, t = now(), i, l, p, box;
-        var pad = Math.max(16, 16 * K);
-        if (near(x, y, op.x, S.gy - OP.h * K / 2, Math.max(pad, OP.h * K / 2 + 4))) { setOperatorColour(op.colour + 1); sfx(660, 990, 0.09); return; }
-        if (near(x, y, drone.x, drone.y, pad + 4)) { if (!rested("scan", "scan", t)) return; scan = { t0: t, x: op.x, y: S.gy - OP.h * K / 2 }; sfx(420, 1680, 0.5, "sine"); return; }
-        var pyNow = patrol ? patrol.y + patrolScanProgress(t).dip * PATROL.stopDip * K : 0;
-        if (patrol && Math.abs(x - patrol.x) <= 58 * K && Math.abs(y - pyNow) <= 26 * K) {
-            patrol.paint = OP_COLOURS[op.colour];
-            hiss(0.5, "highpass", 3600, 0.1);
-            return;
-        }
-        if (scrubber && t >= scrubber.blindUntil && Math.abs(x - scrubber.x) <= 36 * K && Math.abs(y - scrubber.y) <= 24 * K) {
-            scrubber.paint = OP_COLOURS[op.colour];
-            scrubber.blindUntil = t + SCRUB.blindTime;
-            scrubber.state = "patrol";
-            scrubber.job = null;
-            scrubber.prog = 0;
-            hiss(0.5, "highpass", 3600, 0.1);
-            return;
-        }
-        if (binDrone && !binDrone.paint && Math.abs(x - binDrone.x) <= 36 * K && Math.abs(y - binDrone.y) <= 24 * K) {
-            binDrone.paint = OP_COLOURS[op.colour];
-            hiss(0.5, "highpass", 3600, 0.1);
-            return;
-        }
+        var pad = Math.max(16, 16 * K), opY = opCenterY();
+        if (near(x, y, op.x, opY, Math.max(pad, OP.h * K / 2 + 4))) { setOperatorColour(op.colour + 1); sfx(660, 990, 0.09); return; }
+        if (near(x, y, drone.x, drone.y, pad + 4)) { if (!rested("scan", "scan", t)) return; scan = { t0: t, x: op.x, y: opY }; sfx(420, 1680, 0.5, "sine"); return; }
+        if (sprayDroneOrCam(t, x, y, false)) return;
         if (S.cam && near(x, y, S.cam.x, S.cam.y + 4 * K, pad)) {
             if (!rested("cam", "cam", t)) return;
             if (camIsDown(t)) {
@@ -3376,10 +3707,11 @@
             p = S.props[i]; box = PROP_BOX[p.kind];
             var propHW = (p.kind === "bin" && p.dbl) ? 22 : box[0];
             if (Math.abs(x - p.x) <= Math.max(12, propHW * K) && y < S.gy + 4 && y > S.gy - box[1] * K - 4) {
-                if (useProp(p, t)) return;
+                if (useProp(p, t) || p.kind === "cabinet") return;
                 break;
             }
         }
+        sprayAt(x, y, t, false);
     }
 
     function startScene() {
